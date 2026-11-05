@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  云打包会合并此清单。完整读取 QQ 音乐「正在播放」仍依赖系统通知使用权。
+  若云打包后读不到曲目，请在 HBuilderX 使用「自定义调试基座 / 本地离线打包」
+  并合并 android/ 目录下的原生 NotificationListenerService。
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+	<uses-permission android:name="android.permission.INTERNET" />
+	<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+	<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+</manifest>

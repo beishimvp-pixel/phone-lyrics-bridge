@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>歌词桥 · 六格缩略图</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Noto+Sans+SC:wght@400;700;900&family=Noto+Serif+SC:wght@700&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #111; color: #eee; font-family: 'Noto Sans SC', sans-serif; padding: 32px; }
+  h1 { font-size: 18px; margin-bottom: 8px; }
+  p { color: #888; font-size: 13px; margin-bottom: 24px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .cell { border: 1px solid #333; border-radius: 8px; overflow: hidden; background: #1a1a1a; }
+  .label { padding: 10px 12px; font-size: 12px; color: #aaa; border-bottom: 1px solid #333; }
+  .label b { color: #fff; }
+  .stage { height: 220px; position: relative; overflow: hidden; }
+  /* A1 */
+  .a1 { background: #d8d8d4; display: flex; align-items: center; justify-content: center; gap: 12px; }
+  .a1 .p { width: 90px; height: 170px; background: #0b0b0b; border-radius: 10px; padding: 10px; color: #ff5a1f; font-family: 'IBM Plex Mono', monospace; font-size: 9px; }
+  .a1 .pc { width: 180px; height: 110px; background: #1a1a1a; border: 2px solid #333; padding: 10px; color: #e9e9e4; font-size: 10px; font-family: 'IBM Plex Mono', monospace; }
+  .a1 .bar { height: 4px; background: #ff5a1f; margin-top: 8px; width: 60%; }
+  /* A2 */
+  .a2 { background: #fff; display: flex; }
+  .a2 .mark { width: 45%; background: #e60012; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 72px; font-weight: 900; }
+  .a2 .info { flex: 1; padding: 20px; color: #111; font-size: 12px; }
+  .a2 .info strong { display: block; font-size: 20px; margin-bottom: 8px; }
+  /* B1 */
+  .b1 { background: #f5f5f7; padding: 16px; }
+  .b1 .card { background: #fff; border-radius: 12px; padding: 14px; height: 100%; box-shadow: 0 8px 24px rgba(0,0,0,.06); }
+  .b1 h3 { font-size: 16px; margin-bottom: 10px; color: #1d1d1f; }
+  .b1 li { list-style: none; padding: 8px 0; border-bottom: 1px solid #eee; font-size: 12px; color: #333; display: flex; gap: 8px; align-items: center; }
+  .b1 .box { width: 14px; height: 14px; border: 2px solid #3478f6; border-radius: 4px; }
+  .b1 .btn { margin-top: 12px; background: #3478f6; color: #fff; border: none; border-radius: 20px; padding: 8px 16px; font-size: 12px; }
+  /* B2 */
+  .b2 { background: #000; color: #ededed; padding: 16px; font-family: 'IBM Plex Mono', monospace; }
+  .b2 .y { color: #ffcc00; }
+  .b2 .scale { height: 28px; margin-top: 40px; background: repeating-linear-gradient(90deg,#333 0 1px,transparent 1px 8px); position: relative; }
+  .b2 .scale::after { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: #ffcc00; }
+  /* C1 */
+  .c1 { background: linear-gradient(180deg,#18213a,#202c4a); padding: 16px; }
+  .c1 .card { background: #26335a; border-radius: 20px; padding: 14px; color: #e8eefc; font-size: 12px; }
+  .c1 .path { height: 40px; margin: 12px 0; border-radius: 20px; background: linear-gradient(90deg,#9be0cc,#bac3fa); opacity: .7; position: relative; }
+  .c1 .dot { width: 14px; height: 14px; background: #fff; border-radius: 50%; position: absolute; left: 55%; top: 13px; }
+  /* C2 */
+  .c2 { display: flex; background: #fff; }
+  .c2 .l { width: 38%; background: #e60012; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 48px; font-weight: 900; writing-mode: vertical-rl; }
+  .c2 .r { flex: 1; padding: 18px; color: #111; font-size: 12px; }
+</style>
+</head>
+<body>
+  <h1>歌词桥 · 六个候选缩略图</h1>
+  <p>完整版已选：A1 / A2 / B1 → 见 dir-1 ~ dir-3。其余为备选。</p>
+  <div class="grid">
+    <div class="cell"><div class="label"><b>A1</b> 硬件监听器 · 完整版 dir-1</div><div class="stage a1"><div class="p">SYNC<br>晴天<br><span style="color:#e9e9e4">02:14</span></div><div class="pc">DESKTOP LYRIC<br>192.168.111.107<br><div class="bar"></div>故事的小黄花…</div></div></div>
+    <div class="cell"><div class="label"><b>A2</b> 巨字「词」 · 完整版 dir-2</div><div class="stage a2"><div class="mark">词</div><div class="info"><strong>歌词桥</strong>手机播 · 电脑出词<br><br>开始同步</div></div></div>
+    <div class="cell"><div class="label"><b>B1</b> 步骤纸感 · 完整版 dir-3</div><div class="stage b1"><div class="card"><h3>今天</h3><li><span class="box"></span>开电脑端</li><li><span class="box"></span>开通知权限</li><li><span class="box"></span>填 IP 同步</li><button class="btn">开始同步</button></div></div></div>
+    <div class="cell"><div class="label"><b>B2</b> 专业刻度 · 备选</div><div class="stage b2"><div>POSITION <span class="y">02:14.08</span></div><div class="scale"></div><div style="margin-top:12px;font-size:11px;color:#888">IP · DELAY · QQ MUSIC</div></div></div>
+    <div class="cell"><div class="label"><b>C1</b> 柔和路径 · 备选</div><div class="stage c1"><div class="card">现在适合安静跟词<div class="path"><div class="dot"></div></div>暂停也没关系，词会收起</div></div></div>
+    <div class="cell"><div class="label"><b>C2</b> 红白符号变体 · 备选</div><div class="stage c2"><div class="l">词</div><div class="r"><strong style="font-size:18px">歌词桥</strong><br><br>连接<br>192.168.111.107<br><br>开始</div></div></div>
+  </div>
+</body>
+</html>

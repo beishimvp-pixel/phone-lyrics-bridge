@@ -1,0 +1,92 @@
+/**
+ * UTS→Kotlin 注意：传给 Android API 的整数一律用 Int，勿用 number。
+ */
+import Context from 'android.content.Context'
+import Intent from 'android.content.Intent'
+import Service from 'android.app.Service'
+import IBinder from 'android.os.IBinder'
+import Build from 'android.os.Build'
+import Notification from 'android.app.Notification'
+import NotificationChannel from 'android.app.NotificationChannel'
+import NotificationManager from 'android.app.NotificationManager'
+import NotificationCompat from 'androidx.core.app.NotificationCompat'
+
+const CHANNEL_ID = 'lyrics_bridge_sync'
+const NOTIF_ID : Int = 8765
+const START_STICKY : Int = 1
+const SDK_O : Int = 26
+
+/**
+ * 同步时前台保活：常驻通知，降低小米杀后台概率。
+ */
+export class SyncKeepAliveService extends Service {
+	constructor() {
+		super()
+	}
+
+	override onCreate() : void {
+		super.onCreate()
+	}
+
+	override onBind(_intent : Intent | null) : IBinder | null {
+		return null
+	}
+
+	override onStartCommand(intent : Intent | null, flags : Int, startId : Int) : Int {
+		this.ensureForeground()
+		return START_STICKY
+	}
+
+	@UTSAndroid.Suppress('DEPRECATION')
+	override onDestroy() : void {
+		try {
+			this.stopForeground(true)
+		} catch (e) {
+			// ignore
+		}
+		super.onDestroy()
+	}
+
+	private ensureForeground() : void {
+		const ctx = this as Context
+		if (Build.VERSION.SDK_INT >= SDK_O) {
+			const manager = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+			const channel = new NotificationChannel(
+				CHANNEL_ID,
+				'歌词桥同步',
+				NotificationManager.IMPORTANCE_LOW
+			)
+			channel.setDescription('同步播放信息到电脑时保持运行')
+			channel.setShowBadge(false)
+			manager.createNotificationChannel(channel)
+		}
+
+		const icon : Int = ctx.getApplicationInfo().icon
+		const builder = new NotificationCompat.Builder(ctx, CHANNEL_ID)
+		builder.setContentTitle('歌词桥')
+		builder.setContentText('正在同步到电脑…')
+		builder.setSmallIcon(icon)
+		builder.setOngoing(true)
+		builder.setOnlyAlertOnce(true)
+		builder.setPriority(NotificationCompat.PRIORITY_LOW)
+		builder.setCategory(Notification.CATEGORY_SERVICE)
+
+		this.startForeground(NOTIF_ID, builder.build())
+	}
+}
+
+export function startKeepAlive() : void {
+	const ctx = UTSAndroid.getAppContext()!
+	const intent = new Intent(ctx, (new SyncKeepAliveService()).javaClass)
+	if (Build.VERSION.SDK_INT >= SDK_O) {
+		ctx.startForegroundService(intent)
+	} else {
+		ctx.startService(intent)
+	}
+}
+
+export function stopKeepAlive() : void {
+	const ctx = UTSAndroid.getAppContext()!
+	const intent = new Intent(ctx, (new SyncKeepAliveService()).javaClass)
+	ctx.stopService(intent)
+}

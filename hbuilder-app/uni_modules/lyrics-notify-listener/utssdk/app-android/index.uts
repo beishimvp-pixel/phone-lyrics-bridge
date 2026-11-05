@@ -1,0 +1,168 @@
+/**
+ * UTS→Kotlin 注意：凡传给 Android API 的整数必须写成 Int（首字母大写），
+ * 不能用 number / 未标注的字面量循环变量，否则云打包会报 Number but Int expected。
+ */
+import Context from 'android.content.Context'
+import ComponentName from 'android.content.ComponentName'
+import Intent from 'android.content.Intent'
+import Settings from 'android.provider.Settings'
+import MediaSessionManager from 'android.media.session.MediaSessionManager'
+import MediaController from 'android.media.session.MediaController'
+import MediaMetadata from 'android.media.MediaMetadata'
+import PlaybackState from 'android.media.session.PlaybackState'
+
+import PowerManager from 'android.os.PowerManager'
+import Uri from 'android.net.Uri'
+import Build from 'android.os.Build'
+import SystemClock from 'android.os.SystemClock'
+
+export { startKeepAlive, stopKeepAlive } from './SyncKeepAliveService.uts'
+
+const LISTENER_CLASS = 'uts.sdk.modules.lyricsNotifyListener.SessionNotificationListener'
+
+export type NowPlayingInfo = {
+	title : string
+	artist : string
+	album : string
+	positionMs : number
+	durationMs : number
+	playing : boolean
+	packageName : string
+}
+
+export function openNotificationAccess() : void {
+	const activity = UTSAndroid.getUniActivity()!
+	const intent = new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+	activity.startActivity(intent)
+}
+
+/** 引导关闭电池优化，利于切应用 / 息屏后继续同步 */
+export function requestIgnoreBatteryOptimizations() : void {
+	const activity = UTSAndroid.getUniActivity()!
+	const ctx = UTSAndroid.getAppContext()!
+	try {
+		const pm = ctx.getSystemService(Context.POWER_SERVICE) as PowerManager
+		const pkg = ctx.getPackageName()
+		if (Build.VERSION.SDK_INT >= 23) {
+			if (!pm.isIgnoringBatteryOptimizations(pkg)) {
+				const intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+				intent.setData(Uri.parse('package:' + pkg))
+				activity.startActivity(intent)
+			}
+		}
+	} catch (e) {
+		try {
+			const intent2 = new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+			activity.startActivity(intent2)
+		} catch (e2) {
+			// ignore
+		}
+	}
+}
+
+export function hasNotificationAccess() : boolean {
+	const activity = UTSAndroid.getUniActivity()!
+	const pkg = activity.getPackageName()
+	const flat = Settings.Secure.getString(activity.getContentResolver(), 'enabled_notification_listeners')
+	if (flat == null || flat.length == 0) {
+		return false
+	}
+	return flat!.indexOf(pkg) >= 0
+}
+
+function matchMode(pkg : string, mode : string) : boolean {
+	const p = pkg.toLowerCase()
+	if (mode == 'bilibili') {
+		return p.indexOf('bili') >= 0 || p.indexOf('danmaku') >= 0
+	}
+	if (mode == 'fanqie') {
+		return p.indexOf('dragon.read') >= 0 || p.indexOf('fanqie') >= 0
+	}
+	return p.indexOf('qqmusic') >= 0
+}
+
+export function readNowPlaying(mode : string) : NowPlayingInfo | null {
+	const activity = UTSAndroid.getUniActivity()!
+	const mgr = activity.getSystemService(Context.MEDIA_SESSION_SERVICE) as MediaSessionManager
+	const listener = new ComponentName(activity.getPackageName(), LISTENER_CLASS)
+	const sessions = mgr.getActiveSessions(listener)
+	if (sessions == null || sessions.size == 0) {
+		return null
+	}
+
+	let prefer = mode
+	if (prefer != 'bilibili' && prefer != 'fanqie') {
+		prefer = 'qqmusic'
+	}
+
+	let chosenIndex : Int = -1
+	let bestScore : Int = -1
+	const n : Int = sessions.size
+	for (let i : Int = 0; i < n; i++) {
+		const c : MediaController = sessions.get(i)
+		const pkg = c.getPackageName()
+		if (!matchMode(pkg, prefer)) {
+			continue
+		}
+		let score : Int = 100
+		const pbCheck = c.getPlaybackState()
+		if (pbCheck != null) {
+			const stCheck = pbCheck!.getState()
+			if (stCheck == PlaybackState.STATE_PLAYING || stCheck == PlaybackState.STATE_BUFFERING) {
+				score = 110
+			}
+		}
+		if (score > bestScore) {
+			bestScore = score
+			chosenIndex = i
+		}
+	}
+
+	if (chosenIndex < 0) {
+		return null
+	}
+
+	const chosen : MediaController = sessions.get(chosenIndex)
+	const meta = chosen.getMetadata()
+	const pb = chosen.getPlaybackState()
+	if (meta == null) {
+		return null
+	}
+
+	const title = meta.getString(MediaMetadata.METADATA_KEY_TITLE) ?? ''
+	if (title.length == 0) {
+		return null
+	}
+	let artist = meta.getString(MediaMetadata.METADATA_KEY_ARTIST) ?? ''
+	if (artist.length == 0) {
+		artist = meta.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST) ?? ''
+	}
+	const album = meta.getString(MediaMetadata.METADATA_KEY_ALBUM) ?? ''
+	const durationMs = meta.getLong(MediaMetadata.METADATA_KEY_DURATION) as number
+	let positionMs = 0
+	let playing = false
+	if (pb != null) {
+		const st = pb!.getState()
+		playing = st == PlaybackState.STATE_PLAYING || st == PlaybackState.STATE_BUFFERING
+		// 外推进度：MediaSession 的 position 不会每帧更新
+		let pos : Long = pb!.getPosition()
+		if (playing) {
+			const updated : Long = pb!.getLastPositionUpdateTime()
+			const now : Long = SystemClock.elapsedRealtime()
+			if (updated > 0 && now >= updated) {
+				pos = pos + (now - updated)
+			}
+		}
+		positionMs = pos as number
+	}
+
+	return {
+		title,
+		artist,
+		album,
+		positionMs,
+		durationMs,
+		playing,
+		packageName: chosen.getPackageName()
+	} as NowPlayingInfo
+}

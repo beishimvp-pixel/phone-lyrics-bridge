@@ -1,0 +1,62 @@
+{
+  "id": "lyrics-notify-listener",
+  "displayName": "歌词桥通知监听",
+  "version": "1.0.0",
+  "description": "注册 NotificationListenerService，使系统「设备和应用通知」列表出现歌词桥",
+  "keywords": ["notification", "listener"],
+  "engines": {
+    "HBuilderX": "^3.6.8"
+  },
+  "dcloudext": {
+    "type": "uts",
+    "sale": {
+      "regular": {
+        "price": "0.00"
+      }
+    }
+  },
+  "uni_modules": {
+    "dependencies": [],
+    "encrypt": [],
+    "platforms": {
+      "cloud": {
+        "tcb": "n",
+        "aliyun": "n"
+      },
+      "client": {
+        "App": {
+          "app-vue": "n",
+          "app-nvue": "n",
+          "app-uvue": "n",
+          "app-harmony": "n",
+          "app-android": "u",
+          "app-ios": "n"
+        },
+        "H5-mobile": {
+          "Safari": "n",
+          "Android Browser": "n",
+          "微信浏览器(Android)": "n",
+          "QQ浏览器(Android)": "n"
+        },
+        "H5-pc": {
+          "Chrome": "n",
+          "IE": "n",
+          "Edge": "n",
+          "Firefox": "n",
+          "Safari": "n"
+        },
+        "小程序": {
+          "微信": "n",
+          "阿里": "n",
+          "百度": "n",
+          "字节跳动": "n",
+          "QQ": "n"
+        },
+        "快应用": {
+          "华为": "n",
+          "联盟": "n"
+        }
+      }
+    }
+  }
+}

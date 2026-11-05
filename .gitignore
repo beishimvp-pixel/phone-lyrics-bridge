@@ -1,0 +1,30 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+*.iml
+.idea/
+.DS_Store
+Thumbs.db
+
+# HBuilder / uni-app
+hbuilder-app/unpackage/
+hbuilder-app/.hbuilderx/
+**/node_modules/
+
+# Python / PyInstaller
+pc/build/
+pc/dist/
+pc/*.spec
+!pc/歌词桥.spec
+
+# Local secrets / certs
+*.keystore
+*.jks
+.env
+.env.*
+**/cloudcertificate/

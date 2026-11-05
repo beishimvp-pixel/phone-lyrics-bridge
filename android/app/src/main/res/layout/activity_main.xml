@@ -1,0 +1,290 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/brand_white">
+
+    <LinearLayout
+        android:id="@+id/panelConnect"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="0.42"
+            android:background="@color/brand_red"
+            android:gravity="center"
+            android:text="@string/mark_ci"
+            android:textColor="@color/brand_white"
+            android:textSize="96sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="0.58"
+            android:orientation="vertical"
+            android:padding="24dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/app_name"
+                android:textColor="@color/brand_black"
+                android:textSize="28sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/subtitle_connect"
+                android:textColor="@color/brand_mute"
+                android:textSize="14sp" />
+
+            <EditText
+                android:id="@+id/ipInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="28dp"
+                android:background="@android:color/transparent"
+                android:hint="@string/hint_ip"
+                android:importantForAutofill="no"
+                android:inputType="text"
+                android:paddingBottom="10dp"
+                android:textColor="@color/brand_black"
+                android:textColorHint="@color/brand_mute"
+                android:textSize="18sp" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="2dp"
+                android:background="@color/brand_black" />
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:orientation="horizontal">
+
+                <View
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:background="@color/brand_red" />
+
+                <View
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:layout_marginStart="6dp"
+                    android:background="@color/brand_black" />
+
+                <View
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:layout_marginStart="6dp"
+                    android:background="@drawable/swatch_white" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
+
+            <TextView
+                android:id="@+id/statusText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:text="@string/status_idle"
+                android:textColor="@color/brand_mute"
+                android:textSize="13sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnStart"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:text="@string/btn_start"
+                android:textAllCaps="false"
+                android:textColor="@color/brand_white"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                app:backgroundTint="@color/brand_black"
+                app:cornerRadius="0dp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/panelPermit"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="0.28"
+            android:background="@color/brand_red"
+            android:gravity="center"
+            android:text="@string/mark_ci"
+            android:textColor="@color/brand_white"
+            android:textSize="72sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="0.72"
+            android:orientation="vertical"
+            android:padding="24dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/permit_step"
+                android:textColor="@color/brand_mute"
+                android:textSize="13sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/permit_title"
+                android:textColor="@color/brand_black"
+                android:textSize="28sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:lineSpacingExtra="4dp"
+                android:text="@string/permit_body"
+                android:textColor="@color/brand_mute"
+                android:textSize="15sp" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnGoPermit"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:text="@string/btn_go_permit"
+                android:textAllCaps="false"
+                android:textColor="@color/brand_white"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                app:backgroundTint="@color/brand_red"
+                app:cornerRadius="0dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnPermitDone"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginTop="10dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:text="@string/btn_permit_done"
+                android:textAllCaps="false"
+                android:textColor="@color/brand_black"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                app:cornerRadius="0dp"
+                app:strokeColor="@color/brand_black"
+                app:strokeWidth="2dp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/panelSync"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/syncMark"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="0.28"
+            android:background="@color/brand_black"
+            android:gravity="center"
+            android:text="@string/mark_ci"
+            android:textColor="@color/brand_white"
+            android:textSize="72sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="0.72"
+            android:orientation="vertical"
+            android:padding="24dp">
+
+            <TextView
+                android:id="@+id/syncLabel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/syncing_label"
+                android:textColor="@color/brand_mute"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/trackTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/waiting_track"
+                android:textColor="@color/brand_black"
+                android:textSize="28sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/trackArtist"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:textColor="@color/brand_mute"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/syncStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="28dp"
+                android:lineSpacingExtra="6dp"
+                android:textColor="@color/brand_black"
+                android:textSize="16sp" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnStop"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:text="@string/btn_stop"
+                android:textAllCaps="false"
+                android:textColor="@color/brand_white"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                app:backgroundTint="@color/brand_black"
+                app:cornerRadius="0dp" />
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>

@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>歌词桥 · 方向3 步骤纸感</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #f2f2f7;
+    --card: #ffffff;
+    --ink: #1d1d1f;
+    --mute: #8a8f9b;
+    --blue: #3478f6;
+    --line: #ececec;
+    --star: #f6c21b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { min-height: 100vh; background: var(--bg); font-family: 'Noto Sans SC', 'Inter', sans-serif; color: var(--ink); padding: 40px 48px 64px; }
+  .top { max-width: 1240px; margin: 0 auto 28px; display: flex; justify-content: space-between; gap: 24px; align-items: end; }
+  .eyebrow { font-size: 12px; color: var(--mute); font-weight: 600; }
+  .title { font-size: 28px; font-weight: 700; letter-spacing: -.02em; margin-top: 4px; }
+  .top p { max-width: 400px; font-size: 14px; line-height: 1.55; color: #555; }
+  .board { max-width: 1240px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1.05fr; gap: 36px; }
+  .phones { display: flex; gap: 18px; flex-wrap: wrap; }
+  .cap { font-size: 12px; color: var(--mute); margin-bottom: 8px; font-style: italic; }
+  .phone {
+    width: 240px; height: 480px; background: var(--card); border-radius: 32px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.08); padding: 28px 20px 20px; display: flex; flex-direction: column;
+    position: relative; overflow: hidden;
+  }
+  .phone h2 { font-size: 28px; font-weight: 700; letter-spacing: -.03em; }
+  .today { color: var(--star); font-size: 13px; font-weight: 700; margin-bottom: 6px; }
+  .item {
+    display: grid; grid-template-columns: 22px 1fr; gap: 10px; align-items: start;
+    padding: 14px 0; border-bottom: 1px solid var(--line); position: relative;
+  }
+  .item:last-of-type { border-bottom: none; }
+  .check {
+    width: 20px; height: 20px; border: 2px solid var(--blue); border-radius: 6px; margin-top: 1px; cursor: pointer; background: #fff;
+  }
+  .check.on { background: var(--blue); border-color: var(--blue); position: relative; }
+  .check.on::after { content: ''; position: absolute; left: 5px; top: 2px; width: 5px; height: 9px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+  .item strong { display: block; font-size: 15px; font-weight: 600; }
+  .item span { display: block; font-size: 12px; color: var(--mute); margin-top: 3px; line-height: 1.4; }
+  .plus {
+    position: absolute; right: 18px; bottom: 18px; width: 52px; height: 52px; border-radius: 50%;
+    background: var(--blue); color: #fff; border: none; font-size: 28px; line-height: 1; cursor: pointer;
+    box-shadow: 0 10px 24px rgba(52,120,246,.35);
+  }
+  .card-float {
+    background: #fff; border-radius: 16px; padding: 16px;
+    box-shadow: 0 2px 6px rgba(0,0,0,.04), 0 26px 60px rgba(0,0,0,.12);
+    margin-top: 12px;
+  }
+  .btn {
+    width: 100%; height: 46px; border: none; border-radius: 14px; background: var(--blue); color: #fff;
+    font-size: 15px; font-weight: 600; cursor: pointer; margin-top: auto;
+  }
+  .btn.secondary { background: #eee; color: #333; }
+  .status-line { font-size: 13px; color: var(--mute); margin: 8px 0 4px; }
+  .song { font-size: 20px; font-weight: 700; }
+  .pc {
+    background: var(--card); border-radius: 20px; min-height: 480px; padding: 28px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.06);
+  }
+  .pc h3 { font-size: 24px; font-weight: 700; letter-spacing: -.02em; }
+  .pc .sub { color: var(--mute); font-size: 13px; margin-top: 4px; }
+  .list { margin-top: 22px; }
+  .row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 16px 0; border-bottom: 1px solid var(--line); font-size: 14px;
+  }
+  .row .l { display: flex; gap: 12px; align-items: center; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--blue); }
+  .dot.gray { background: #c7c7cc; }
+  .badge { font-size: 12px; color: var(--blue); font-weight: 600; }
+  .preview {
+    margin-top: 24px; background: #fafafa; border-radius: 16px; padding: 28px; text-align: center; min-height: 160px;
+  }
+  .preview .now { font-size: 26px; font-weight: 700; margin: 10px 0; }
+  .preview .next { color: var(--mute); font-size: 14px; }
+  .note { max-width: 1240px; margin: 28px auto 0; font-size: 13px; color: #666; line-height: 1.6; }
+</style>
+</head>
+<body>
+  <div class="top">
+    <div>
+      <div class="eyebrow">DIR-3 · NATIVE POLISH</div>
+      <div class="title">步骤纸感</div>
+    </div>
+    <p>同步就是三步待办。白纸列表、单一蓝色动作、停播后预览区安静清空。勾选与按钮可点。</p>
+  </div>
+
+  <div class="board">
+    <div class="phones" id="phones"></div>
+    <div>
+      <div class="cap">电脑工作台</div>
+      <div class="pc" id="pc"></div>
+    </div>
+  </div>
+  <p class="note"><b>form：</b>第一次用就是三步，界面直接做成「今天」清单。<br><b>借自：</b>Things 3 式原生精修（发丝线、勾选、蓝色加号）。</p>
+
+<script>
+const tasks = [
+  { id: 'pc', title: '打开电脑端', desc: '运行 pc/run.bat，记下局域网 IP', on: true },
+  { id: 'perm', title: '开启通知使用权', desc: '否则读不到 QQ 音乐', on: false },
+  { id: 'sync', title: '填写 IP 并开始同步', desc: '同一路由器即可，网线也行', on: false },
+];
+let syncing = false;
+let playing = true;
+
+function toggleTask(id) {
+  const t = tasks.find(x => x.id === id);
+  t.on = !t.on;
+  if (id === 'sync' && t.on) { syncing = true; playing = true; }
+  if (id === 'sync' && !t.on) { syncing = false; }
+  render();
+}
+
+function render() {
+  const allReady = tasks.every(t => t.on);
+  document.getElementById('phones').innerHTML = `
+    <div>
+      <div class="cap">清单 · 连接流程</div>
+      <div class="phone">
+        <div class="today">今天</div>
+        <h2>歌词桥</h2>
+        <div style="margin-top:18px">
+          ${tasks.map(t => `
+            <div class="item">
+              <div class="check ${t.on?'on':''}" onclick="toggleTask('${t.id}')"></div>
+              <div>
+                <strong style="${t.on?'color:#8a8f9b;text-decoration:line-through':''}">${t.title}</strong>
+                <span>${t.desc}</span>
+              </div>
+            </div>`).join('')}
+        </div>
+        <button class="btn" onclick="tasks.forEach(t=>t.on=true);syncing=true;playing=true;render()">开始同步</button>
+        <button class="plus" title="快速同步" onclick="tasks.forEach(t=>t.on=true);syncing=true;playing=true;render()">+</button>
+      </div>
+    </div>
+    <div>
+      <div class="cap">同步中 / 已停止</div>
+      <div class="phone">
+        <div class="today">${playing ? '同步中' : '已暂停'}</div>
+        <h2 style="font-size:24px">正在听</h2>
+        <div class="card-float">
+          <div class="status-line">${syncing ? '已连接到电脑' : '未连接'}</div>
+          <div class="song">晴天</div>
+          <div class="status-line">周杰伦 · QQ 音乐</div>
+          <div style="margin-top:12px;font-size:15px;line-height:1.6">${playing ? '眼前的黑白照片<br>让人想起当初' : '电脑歌词已隐藏'}</div>
+        </div>
+        <button class="btn" style="margin-top:16px" onclick="playing=!playing;render()">${playing?'暂停预览':'恢复播放'}</button>
+        <button class="btn secondary" style="margin-top:8px" onclick="syncing=false;playing=false;tasks[2].on=false;render()">停止同步</button>
+      </div>
+    </div>
+    <div>
+      <div class="cap">授权说明</div>
+      <div class="phone">
+        <div class="today">权限</div>
+        <h2 style="font-size:24px">通知使用权</h2>
+        <div class="card-float">
+          <strong style="font-size:15px">为什么需要？</strong>
+          <p style="font-size:13px;color:#8a8f9b;margin-top:8px;line-height:1.55">Android 规定：只有开启通知读取，才能拿到 QQ 音乐的歌名与进度。我们不上传聊天内容。</p>
+        </div>
+        <button class="btn" onclick="tasks[1].on=true;render()">我已开启</button>
+      </div>
+    </div>`;
+
+  const show = syncing && playing;
+  document.getElementById('pc').innerHTML = `
+    <h3>桌面歌词工作台</h3>
+    <div class="sub">安静跟词 · 不改变手机出声</div>
+    <div class="list">
+      <div class="row"><div class="l"><span class="dot"></span>服务地址</div><span>192.168.111.107:8765</span></div>
+      <div class="row"><div class="l"><span class="dot ${syncing?'':'gray'}"></span>手机连接</div><span class="badge">${syncing?'已连接':'等待中'}</span></div>
+      <div class="row"><div class="l"><span class="dot ${show?'':'gray'}"></span>桌面歌词</div><span class="badge">${show?'显示':'隐藏'}</span></div>
+    </div>
+    <div class="preview">
+      ${show
+        ? `<div class="status-line">当前句</div><div class="now">故事的小黄花</div><div class="next">从出生那年就飘着</div>`
+        : `<div class="status-line">预览</div><div class="now" style="color:#c7c7cc;font-size:20px">没有正在播放的歌曲</div><div class="next">停止后自动消失</div>`}
+    </div>`;
+}
+render();
+</script>
+</body>
+</html>

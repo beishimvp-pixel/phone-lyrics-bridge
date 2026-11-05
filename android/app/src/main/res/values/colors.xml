@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="brand_red">#E60012</color>
+    <color name="brand_black">#111111</color>
+    <color name="brand_white">#FFFFFF</color>
+    <color name="brand_mute">#6B6B6B</color>
+    <color name="brand_line">#EEEEEE</color>
+    <color name="brand_gray_badge">#DDDDDD</color>
+</resources>

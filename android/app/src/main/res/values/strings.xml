@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">歌词桥</string>
+    <string name="mark_ci">词</string>
+    <string name="subtitle_connect">手机播 · 电脑出词</string>
+    <string name="hint_ip">电脑局域网 IP</string>
+    <string name="btn_start">开始同步</string>
+    <string name="btn_stop">停止同步</string>
+    <string name="btn_go_permit">去开启</string>
+    <string name="btn_permit_done">已开启，继续</string>
+    <string name="permit_title">通知使用权</string>
+    <string name="permit_step">需要一步系统授权</string>
+    <string name="permit_body">用来读取 QQ 音乐正在播放的歌曲与进度。可随时在系统设置关闭。</string>
+    <string name="status_idle">未连接</string>
+    <string name="syncing_label">同步中</string>
+    <string name="waiting_track">等待 QQ 音乐播放</string>
+</resources>

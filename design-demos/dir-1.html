@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>歌词桥 · 方向1 硬件监听器</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --panel: #d8d8d4;
+    --ink: #0b0b0b;
+    --screen: #0b0b0b;
+    --key: #e9e9e4;
+    --orange: #ff5a1f;
+    --muted: #8a8a86;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    min-height: 100vh;
+    background:
+      linear-gradient(rgba(0,0,0,.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,0,0,.04) 1px, transparent 1px),
+      var(--panel);
+    background-size: 24px 24px, 24px 24px, auto;
+    font-family: 'Noto Sans SC', sans-serif;
+    color: var(--ink);
+    padding: 40px 48px 64px;
+  }
+  .top { max-width: 1280px; margin: 0 auto 28px; display: flex; justify-content: space-between; gap: 24px; align-items: end; }
+  .top h1 { font-family: 'IBM Plex Mono', monospace; font-size: 13px; letter-spacing: .18em; text-transform: uppercase; }
+  .top p { font-size: 14px; color: #444; max-width: 420px; line-height: 1.55; }
+  .board { max-width: 1280px; margin: 0 auto; display: grid; grid-template-columns: 1.15fr .85fr; gap: 36px; align-items: start; }
+  .phones { display: flex; gap: 18px; flex-wrap: wrap; }
+  .phone-wrap { width: 210px; }
+  .cap { font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .12em; color: #666; margin-bottom: 8px; }
+  .phone {
+    width: 210px; height: 420px; background: var(--screen); border-radius: 18px;
+    border: 3px solid #222; padding: 14px 12px; color: var(--key);
+    display: flex; flex-direction: column; box-shadow: 0 18px 40px rgba(0,0,0,.25);
+    position: relative; overflow: hidden;
+  }
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--orange); display: inline-block; margin-right: 6px; }
+  .readout { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--orange); letter-spacing: .08em; }
+  .song { font-family: 'IBM Plex Mono', monospace; font-size: 18px; line-height: 1.2; margin: 14px 0 4px; color: #fff; }
+  .artist { font-size: 12px; color: var(--muted); }
+  .progress { margin: 16px 0; height: 8px; background: #222; border-radius: 2px; overflow: hidden; }
+  .progress > i { display: block; height: 100%; background: var(--orange); width: 38%; }
+  .keys { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: auto; }
+  .key {
+    background: var(--key); color: var(--ink); border: none; border-radius: 6px;
+    font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .06em;
+    padding: 14px 8px; cursor: pointer; box-shadow: inset 0 -4px 0 #bdbdb8;
+  }
+  .key:active { transform: translateY(2px); box-shadow: inset 0 -1px 0 #bdbdb8; }
+  .key.active { background: var(--orange); color: #fff; box-shadow: inset 0 -4px 0 #c44512; }
+  .silkscreen { font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: .16em; color: #666; text-transform: uppercase; margin-bottom: 6px; }
+  .field {
+    width: 100%; background: #151515; border: 1px solid #333; color: #fff;
+    font-family: 'IBM Plex Mono', monospace; font-size: 12px; padding: 10px; border-radius: 4px; margin: 8px 0 12px;
+  }
+  .hint { font-size: 11px; color: #777; line-height: 1.45; margin-top: 8px; }
+  .pc {
+    background: #1c1c1a; border: 3px solid #2a2a28; border-radius: 10px; color: #e9e9e4;
+    padding: 18px; min-height: 420px; box-shadow: 0 18px 40px rgba(0,0,0,.2);
+  }
+  .pc-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: .12em; }
+  .pc-ip { color: var(--orange); }
+  .rack { display: grid; gap: 10px; }
+  .ch {
+    display: grid; grid-template-columns: 70px 1fr 64px; gap: 10px; align-items: center;
+    background: #121210; border: 1px solid #2e2e2c; padding: 10px 12px; border-radius: 6px;
+  }
+  .ch label { font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .1em; color: #888; }
+  .meter { height: 10px; background: #2a2a28; border-radius: 2px; overflow: hidden; }
+  .meter > i { display: block; height: 100%; background: var(--orange); }
+  .lyric-stage {
+    margin-top: 18px; background: #0b0b0b; border: 1px dashed #3a3a38; border-radius: 8px;
+    min-height: 180px; padding: 28px 20px; text-align: center;
+  }
+  .lyric-stage .now { font-size: 22px; font-weight: 700; margin: 10px 0; }
+  .lyric-stage .next { color: #666; font-size: 13px; }
+  .tag { display: inline-block; padding: 2px 8px; border: 1px solid #444; border-radius: 3px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #aaa; }
+  .note { max-width: 1280px; margin: 28px auto 0; font-size: 13px; color: #555; line-height: 1.6; }
+  .note b { color: #222; }
+</style>
+</head>
+<body>
+  <div class="top">
+    <div>
+      <h1>Dir-1 · Hardware Monitor</h1>
+      <div style="font-size:22px;font-weight:700;margin-top:6px;">硬件监听器</div>
+    </div>
+    <p>把「跨设备跟词」做成随身监听面板：橙只标激活态，读数像液晶，操作像实体按键。点按键可切换状态。</p>
+  </div>
+
+  <div class="board">
+    <div>
+      <div class="phones" id="phones"></div>
+    </div>
+    <div>
+      <div class="cap">PC · CONTROL RACK</div>
+      <div class="pc" id="pc"></div>
+    </div>
+  </div>
+
+  <p class="note"><b>form：</b>歌词桥是跨设备监听，不是社交 App——界面像一块小硬件更贴切。<br>
+  <b>借自：</b>Teenage Engineering 面板语言（方键、丝印、单强调色）。</p>
+
+<script>
+const state = { screen: 'sync', connected: true, playing: true };
+
+const screens = {
+  connect: (s) => `
+    <div class="silkscreen">Unit · Link</div>
+    <div class="readout">WAITING HOST</div>
+    <div class="song" style="font-size:15px">输入电脑 IP</div>
+    <input class="field" id="ip" value="192.168.111.107" />
+    <div class="keys">
+      <button class="key" onclick="go('permit')">PERMIT</button>
+      <button class="key active" onclick="connect()">CONNECT</button>
+    </div>
+    <div class="hint">电脑与手机同一局域网。网线 / Wi‑Fi 均可。</div>`,
+  permit: () => `
+    <div class="silkscreen">Gate · Access</div>
+    <div class="readout">NOTIFICATION</div>
+    <div class="song" style="font-size:16px">通知使用权</div>
+    <div class="hint" style="margin:16px 0;color:#bbb">系统要求：不开权限就读不到 QQ 音乐正在播什么。</div>
+    <div class="keys">
+      <button class="key" onclick="go('connect')">BACK</button>
+      <button class="key active" onclick="go('sync')">GRANT</button>
+    </div>`,
+  sync: () => `
+    <div class="silkscreen">Monitor · Live</div>
+    <div class="readout"><span class="status-dot"></span>SYNC ON</div>
+    <div class="song">晴天</div>
+    <div class="artist">周杰伦 · QQ 音乐</div>
+    <div class="progress"><i style="width:${state.playing ? '42%' : '42%'};opacity:${state.playing?1:.35}"></i></div>
+    <div class="readout">${state.playing ? '02:14 / 04:29' : 'PAUSED'}</div>
+    <div class="keys">
+      <button class="key ${state.playing?'':'active'}" onclick="togglePlay()">${state.playing?'PAUSE':'PLAY'}</button>
+      <button class="key" onclick="stopAll()">STOP</button>
+    </div>`,
+  idle: () => `
+    <div class="silkscreen">Monitor · Idle</div>
+    <div class="readout">NO SIGNAL</div>
+    <div class="song" style="font-size:16px;color:#666">等待播放</div>
+    <div class="hint" style="margin-top:20px">手机一停，电脑歌词自动收起。</div>
+    <div class="keys">
+      <button class="key active" onclick="go('sync')">RESUME</button>
+      <button class="key" onclick="go('connect')">HOST</button>
+    </div>`
+};
+
+function go(name) {
+  state.screen = name;
+  if (name === 'sync') { state.connected = true; state.playing = true; }
+  if (name === 'idle') { state.playing = false; }
+  render();
+}
+function connect() { state.connected = true; go('sync'); }
+function togglePlay() { state.playing = !state.playing; if (!state.playing) state.screen = 'sync'; render(); }
+function stopAll() { state.playing = false; state.screen = 'idle'; render(); }
+
+function phone(label, initial) {
+  const html = screens[initial] ? screens[initial]() : screens.sync();
+  return `<div class="phone-wrap"><div class="cap">${label}</div><div class="phone" data-init="${initial}">${html}</div></div>`;
+}
+
+function renderPC() {
+  const live = state.connected && state.playing && state.screen !== 'idle' && state.screen !== 'connect' && state.screen !== 'permit';
+  const paused = state.connected && !state.playing && state.screen === 'sync';
+  document.getElementById('pc').innerHTML = `
+    <div class="pc-top"><span>LYRICS BRIDGE · RACK</span><span class="pc-ip">ws://192.168.111.107:8765</span></div>
+    <div class="rack">
+      <div class="ch"><label>LINK</label><div class="meter"><i style="width:${state.connected?'100%':'8%'}"></i></div><span class="tag">${state.connected?'ON':'OFF'}</span></div>
+      <div class="ch"><label>PLAY</label><div class="meter"><i style="width:${live?'70%':paused?'30%':'0%'}"></i></div><span class="tag">${live?'RUN':paused?'HOLD':'STOP'}</span></div>
+      <div class="ch"><label>LYRIC</label><div class="meter"><i style="width:${live?'55%':'0%'}"></i></div><span class="tag">${live?'SHOW':'HIDE'}</span></div>
+    </div>
+    <div class="lyric-stage">
+      ${live ? `<div class="tag">DESKTOP OVERLAY</div><div class="now">故事的小黄花</div><div class="next">从出生那年就飘着</div>` :
+        `<div class="tag">HIDDEN</div><div class="now" style="color:#444;font-size:16px">无播放信号 · 歌词已隐藏</div><div class="next">符合产品承诺：停播即消失</div>`}
+    </div>`;
+}
+
+function render() {
+  // Four phones showing key states; active interaction on first phone mirrors state.screen
+  const order = [
+    ['01 连接', state.screen === 'connect' || state.screen === 'permit' ? state.screen : 'connect'],
+    ['02 授权', 'permit'],
+    ['03 同步中', state.screen === 'idle' ? 'idle' : 'sync'],
+    ['04 已停止', 'idle']
+  ];
+  // Make phones 1 interactive as current, others static snapshots
+  document.getElementById('phones').innerHTML = `
+    <div class="phone-wrap"><div class="cap">操作台 · 当前</div><div class="phone" id="mainPhone">${screens[state.screen]()}</div></div>
+    <div class="phone-wrap"><div class="cap">快照 · 授权</div><div class="phone">${screens.permit()}</div></div>
+    <div class="phone-wrap"><div class="cap">快照 · 同步</div><div class="phone">${screens.sync()}</div></div>
+    <div class="phone-wrap"><div class="cap">快照 · 停止</div><div class="phone">${screens.idle()}</div></div>
+  `;
+  renderPC();
+}
+render();
+</script>
+</body>
+</html>

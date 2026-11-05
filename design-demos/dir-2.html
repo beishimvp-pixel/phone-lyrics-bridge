@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>歌词桥 · 方向2 巨字「词」</title>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Noto+Sans+SC:wght@400;500;700;900&display=swap" rel="stylesheet" />
+<style>
+  :root { --red: #e60012; --ink: #111; --paper: #fff; --mute: #6b6b6b; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { min-height: 100vh; background: #f3f3f3; font-family: 'Noto Sans SC', sans-serif; color: var(--ink); padding: 40px 48px 64px; }
+  .top { max-width: 1200px; margin: 0 auto 32px; display: flex; justify-content: space-between; gap: 24px; align-items: end; }
+  .top h1 { font-size: 12px; letter-spacing: .2em; color: var(--mute); font-weight: 700; }
+  .top .title { font-size: 28px; font-weight: 900; margin-top: 6px; }
+  .top p { max-width: 380px; font-size: 14px; line-height: 1.55; color: #444; }
+  .board { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: auto 1fr; gap: 40px; align-items: start; }
+  .phones { display: flex; gap: 20px; flex-wrap: wrap; }
+  .cap { font-size: 12px; color: var(--mute); margin-bottom: 8px; font-weight: 500; }
+  .phone {
+    width: 230px; height: 460px; background: #fff; border-radius: 28px; overflow: hidden;
+    box-shadow: 0 20px 50px rgba(0,0,0,.12); border: 1px solid #e5e5e5; display: flex; flex-direction: column;
+  }
+  .mark {
+    background: var(--red); color: #fff; flex: 0 0 42%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 120px; font-weight: 900; line-height: 1; font-family: 'Noto Sans SC', sans-serif;
+  }
+  .mark.sm { flex: 0 0 28%; font-size: 72px; }
+  .body { padding: 22px 20px 24px; flex: 1; display: flex; flex-direction: column; }
+  .brand { font-size: 20px; font-weight: 900; }
+  .sub { color: var(--mute); font-size: 13px; margin-top: 4px; line-height: 1.5; }
+  .input {
+    margin-top: 18px; border: none; border-bottom: 2px solid #111; font-size: 16px; padding: 8px 0;
+    font-family: inherit; width: 100%; outline: none;
+  }
+  .btn {
+    margin-top: auto; background: #111; color: #fff; border: none; height: 48px; font-size: 15px; font-weight: 700;
+    cursor: pointer; width: 100%;
+  }
+  .btn.red { background: var(--red); }
+  .btn.ghost { background: #fff; color: #111; border: 2px solid #111; }
+  .step { font-size: 12px; color: var(--mute); margin-bottom: 10px; }
+  .song { font-size: 22px; font-weight: 900; margin-top: 8px; }
+  .lyric { margin-top: 18px; font-size: 15px; line-height: 1.7; }
+  .lyric em { font-style: normal; font-weight: 700; border-bottom: 3px solid var(--red); }
+  .palette { display: flex; gap: 6px; margin-top: 12px; }
+  .palette i { width: 14px; height: 14px; display: block; }
+  .pc {
+    background: #fff; border: 1px solid #e5e5e5; min-height: 460px;
+    display: grid; grid-template-columns: 120px 1fr; box-shadow: 0 20px 50px rgba(0,0,0,.08);
+  }
+  .pc-rail { background: var(--red); color: #fff; display: flex; align-items: center; justify-content: center; writing-mode: vertical-rl; font-size: 42px; font-weight: 900; letter-spacing: .2em; }
+  .pc-main { padding: 28px 32px; display: flex; flex-direction: column; }
+  .pc-main h2 { font-size: 28px; font-weight: 900; }
+  .meta { margin-top: 8px; color: var(--mute); font-size: 13px; }
+  .rows { margin-top: 28px; display: grid; gap: 0; }
+  .row { display: grid; grid-template-columns: 100px 1fr auto; gap: 12px; padding: 14px 0; border-top: 1px solid #eee; font-size: 14px; align-items: center; }
+  .row b { font-weight: 700; }
+  .pill { font-size: 12px; font-weight: 700; padding: 4px 10px; background: #111; color: #fff; }
+  .pill.off { background: #ddd; color: #666; }
+  .stage {
+    margin-top: auto; border-top: 2px solid #111; padding-top: 24px; text-align: left;
+  }
+  .stage .big { font-size: 32px; font-weight: 900; margin: 8px 0; }
+  .stage .small { color: var(--mute); }
+  .note { max-width: 1200px; margin: 28px auto 0; font-size: 13px; color: #666; line-height: 1.6; }
+</style>
+</head>
+<body>
+  <div class="top">
+    <div>
+      <h1>DIR-2 · MINIMAL SYMBOL</h1>
+      <div class="title">巨字「词」</div>
+    </div>
+    <p>半屏一个字讲完产品：词出现在桌面。红 / 黑 / 白三色，信息栏几乎裸排。点按钮切换状态。</p>
+  </div>
+
+  <div class="board">
+    <div>
+      <div class="phones">
+        <div>
+          <div class="cap">连接</div>
+          <div class="phone" id="p1"></div>
+        </div>
+        <div>
+          <div class="cap">授权</div>
+          <div class="phone" id="p2"></div>
+        </div>
+        <div>
+          <div class="cap">同步 / 停止</div>
+          <div class="phone" id="p3"></div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="cap">电脑控制台</div>
+      <div class="pc" id="pc"></div>
+    </div>
+  </div>
+  <p class="note"><b>form：</b>产品承诺就是「词」落在桌面，所以符号就是内容。<br><b>借自：</b>佐藤可士和极简符号（半屏标志 + 半屏信息）。</p>
+
+<script>
+let mode = 'live'; // live | stop
+
+function render() {
+  document.getElementById('p1').innerHTML = `
+    <div class="mark">词</div>
+    <div class="body">
+      <div class="brand">歌词桥</div>
+      <div class="sub">手机播 · 电脑出词</div>
+      <input class="input" value="192.168.111.107" />
+      <div class="palette"><i style="background:#e60012"></i><i style="background:#111"></i><i style="background:#fff;border:1px solid #ddd"></i></div>
+      <button class="btn" onclick="mode='live';render()">开始同步</button>
+    </div>`;
+
+  document.getElementById('p2').innerHTML = `
+    <div class="mark sm">词</div>
+    <div class="body">
+      <div class="step">需要一步系统授权</div>
+      <div class="brand">通知使用权</div>
+      <div class="sub" style="margin-top:12px">用来读取 QQ 音乐正在播放的歌曲与进度。可随时在系统设置关闭。</div>
+      <button class="btn red" style="margin-top:24px" onclick="alert('原型：跳转系统设置')">去开启</button>
+      <button class="btn ghost" style="margin-top:10px" onclick="mode='live';render()">已开启，继续</button>
+    </div>`;
+
+  document.getElementById('p3').innerHTML = mode === 'live' ? `
+    <div class="mark sm" style="background:#111">词</div>
+    <div class="body">
+      <div class="step">同步中</div>
+      <div class="song">晴天</div>
+      <div class="sub">周杰伦</div>
+      <div class="lyric">眼前的<em>黑白照片</em><br>让人想起当初</div>
+      <button class="btn" onclick="mode='stop';render()">停止同步</button>
+    </div>` : `
+    <div class="mark sm" style="background:#ddd;color:#111">词</div>
+    <div class="body">
+      <div class="step">已停止</div>
+      <div class="song" style="color:#999">无信号</div>
+      <div class="sub">电脑歌词已自动消失</div>
+      <button class="btn red" onclick="mode='live';render()">重新同步</button>
+    </div>`;
+
+  document.getElementById('pc').innerHTML = `
+    <div class="pc-rail">词</div>
+    <div class="pc-main">
+      <h2>歌词桥</h2>
+      <div class="meta">桌面端 · 只显示歌词，不抢声音</div>
+      <div class="rows">
+        <div class="row"><b>地址</b><span>192.168.111.107:8765</span><span class="pill">局域网</span></div>
+        <div class="row"><b>连接</b><span>手机已连接</span><span class="pill">1</span></div>
+        <div class="row"><b>歌词</b><span>${mode==='live'?'显示中':'已隐藏'}</span><span class="pill ${mode==='live'?'':'off'}">${mode==='live'?'ON':'OFF'}</span></div>
+      </div>
+      <div class="stage">
+        ${mode==='live'
+          ? `<div class="small">DESKTOP</div><div class="big">故事的小黄花</div><div class="small">从出生那年就飘着</div>`
+          : `<div class="small">DESKTOP</div><div class="big" style="color:#ccc">—</div><div class="small">停播即隐藏</div>`}
+      </div>
+    </div>`;
+}
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+{
+	"pages": [{
+		"path": "pages/index/index",
+		"style": {
+			"navigationStyle": "custom",
+			"app-plus": {
+				"titleNView": false,
+				"bounce": "none"
+			}
+		}
+	}],
+	"globalStyle": {
+		"navigationBarTextStyle": "white",
+		"navigationBarTitleText": "歌词桥",
+		"navigationBarBackgroundColor": "#E60012",
+		"backgroundColor": "#FFFFFF"
+	}
+}

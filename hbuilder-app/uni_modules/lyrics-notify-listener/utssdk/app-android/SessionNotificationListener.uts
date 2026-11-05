@@ -1,0 +1,11 @@
+import NotificationListenerService from 'android.service.notification.NotificationListenerService'
+
+export class SessionNotificationListener extends NotificationListenerService {
+	override onCreate() : void {
+		super.onCreate()
+	}
+
+	override onListenerConnected() : void {
+		super.onListenerConnected()
+	}
+}
