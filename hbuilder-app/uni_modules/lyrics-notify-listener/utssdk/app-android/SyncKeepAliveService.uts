@@ -1,5 +1,5 @@
 /**
- * UTS→Kotlin 注意：传给 Android API 的整数一律用 Int，勿用 number。
+ * UTS→Kotlin：整数一律 Int。本服务只做前台通知保活，避免复杂 WakeLock 类型导致云打包失败。
  */
 import Context from 'android.content.Context'
 import Intent from 'android.content.Intent'
@@ -17,7 +17,7 @@ const START_STICKY : Int = 1
 const SDK_O : Int = 26
 
 /**
- * 同步时前台保活：常驻通知，降低小米杀后台概率。
+ * 同步时前台保活：常驻通知，降低息屏/切后台被杀概率。
  */
 export class SyncKeepAliveService extends Service {
 	constructor() {
@@ -56,7 +56,7 @@ export class SyncKeepAliveService extends Service {
 				'歌词桥同步',
 				NotificationManager.IMPORTANCE_LOW
 			)
-			channel.setDescription('同步播放信息到电脑时保持运行')
+			channel.setDescription('同步播放信息到电脑时保持运行（息屏也尽量不断）')
 			channel.setShowBadge(false)
 			manager.createNotificationChannel(channel)
 		}
@@ -64,7 +64,7 @@ export class SyncKeepAliveService extends Service {
 		const icon : Int = ctx.getApplicationInfo().icon
 		const builder = new NotificationCompat.Builder(ctx, CHANNEL_ID)
 		builder.setContentTitle('歌词桥')
-		builder.setContentText('正在同步到电脑…')
+		builder.setContentText('正在同步到电脑（请勿结束此通知）')
 		builder.setSmallIcon(icon)
 		builder.setOngoing(true)
 		builder.setOnlyAlertOnce(true)

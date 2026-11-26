@@ -9,7 +9,7 @@
 			<view class="body">
 				<text class="eyebrow">手机播 · 电脑出词</text>
 				<text class="brand">歌词桥</text>
-				<text class="lede">把 QQ 音乐的歌词同步到电脑桌面。声音仍在手机。</text>
+				<text class="lede">手机播歌，电脑出词。支持 QQ / 汽水 / 网易云 / 酷狗。</text>
 
 				<view class="field">
 					<text class="field-label">电脑局域网 IP</text>
@@ -23,16 +23,16 @@
 				</view>
 
 				<text class="field-label modes-head">同步来源</text>
-				<view class="seg">
+				<view class="seg wrap">
 					<view
 						v-for="m in modes"
 						:key="m.id"
 						class="seg-item"
-						:class="{ on: source===m.id, primary: m.id==='qqmusic' }"
+						:class="{ on: source===m.id, primary: m.kind==='music' }"
 						@click="setSource(m.id)"
 					>
 						<text class="seg-name">{{ m.name }}</text>
-						<text v-if="m.id!=='qqmusic'" class="seg-tag">实验</text>
+						<text v-if="m.kind!=='music'" class="seg-tag">实验</text>
 					</view>
 				</view>
 				<text class="mode-tip">{{ sourceTip }}</text>
@@ -75,7 +75,7 @@
 						<text class="check-num">02</text>
 						<view class="check-copy">
 							<text class="check-title">电池与后台</text>
-							<text class="check-desc">电量无限制，忽略电池优化</text>
+							<text class="check-desc">务必忽略电池优化，息屏才不断词</text>
 						</view>
 						<text class="check-go">去设置</text>
 					</view>
@@ -107,7 +107,7 @@
 				<text class="sub artist">{{ artist || ' ' }}</text>
 				<text class="lyric">{{ status }}</text>
 
-				<view class="seg compact">
+				<view class="seg wrap compact">
 					<view
 						v-for="m in modes"
 						:key="m.id"
@@ -138,12 +138,18 @@
 	// #endif
 
 	const PORT = 8765
-	const RECONNECT_MS = 3000
-	const EMPTY_MISS_LIMIT = 12
+	const RECONNECT_MS = 2500
+	const EMPTY_MISS_LIMIT = 40
+	const LAST_HOLD_MS = 45000
+	const KEEPALIVE_REFRESH_MS = 25000
+	const OPEN_WATCHDOG_MS = 4000
 	const MODES = [
-		{ id: 'qqmusic', name: 'QQ音乐', short: 'QQ音乐', tip: '首选：同步 QQ 音乐歌词到电脑', wait: '等待QQ音乐播放' },
-		{ id: 'bilibili', name: 'B站字幕', short: 'B站', tip: '实验：有 CC/AI 字幕时尽量跟字幕', wait: '等待B站播放' },
-		{ id: 'fanqie', name: '番茄听书', short: '番茄', tip: '实验：电脑显示章节或书名', wait: '等待番茄听书播放' }
+		{ id: 'qqmusic', kind: 'music', name: 'QQ音乐', short: 'QQ', tip: '同步 QQ 音乐歌词到电脑', wait: '等待QQ音乐播放' },
+		{ id: 'soda', kind: 'music', name: '汽水音乐', short: '汽水', tip: '同步汽水音乐歌词到电脑', wait: '等待汽水音乐播放' },
+		{ id: 'netease', kind: 'music', name: '网易云', short: '网易云', tip: '同步网易云音乐歌词到电脑', wait: '等待网易云播放' },
+		{ id: 'kugou', kind: 'music', name: '酷狗音乐', short: '酷狗', tip: '同步酷狗音乐歌词到电脑', wait: '等待酷狗播放' },
+		{ id: 'bilibili', kind: 'extra', name: 'B站字幕', short: 'B站', tip: '实验：有 CC/AI 字幕时尽量跟字幕', wait: '等待B站播放' },
+		{ id: 'fanqie', kind: 'extra', name: '番茄听书', short: '番茄', tip: '实验：电脑显示章节或书名', wait: '等待番茄听书播放' }
 	]
 
 	export default {
@@ -161,11 +167,17 @@
 				title: '',
 				artist: '',
 				socketTask: null,
+				nativeWs: null,
 				timer: null,
 				reconnectTimer: null,
+				openWatchdog: null,
+				_lastKeepAliveAt: 0,
+				_connectGen: 0,
 				emptyMiss: 0,
 				stopSent: false,
-				pcHost: ''
+				pcHost: '',
+				lastInfo: null,
+				lastInfoAt: 0
 			}
 		},
 		computed: {
@@ -189,7 +201,7 @@
 			syncLiveLabel() {
 				if (!this.syncing) return '已停止'
 				if (this.socketReady) return '已连接'
-				return '重连中'
+				return '连接中'
 			}
 		},
 		onUnload() {
@@ -245,14 +257,41 @@
 					this.timer = null
 				}
 			},
+			clearOpenWatchdog() {
+				if (this.openWatchdog) {
+					clearTimeout(this.openWatchdog)
+					this.openWatchdog = null
+				}
+			},
 			closeSocketOnly() {
 				this.socketReady = false
+				this.clearOpenWatchdog()
+				if (this.nativeWs) {
+					try {
+						this.nativeWs.onopen = null
+						this.nativeWs.onerror = null
+						this.nativeWs.onclose = null
+						this.nativeWs.close()
+					} catch (e) {}
+					this.nativeWs = null
+				}
 				if (this.socketTask) {
 					try {
 						this.socketTask.close()
 					} catch (e) {}
 					this.socketTask = null
 				}
+			},
+			sendRaw(text) {
+				if (this.nativeWs && this.nativeWs.readyState === 1) {
+					this.nativeWs.send(text)
+					return true
+				}
+				if (this.socketTask && this.socketReady) {
+					this.socketTask.send({ data: text })
+					return true
+				}
+				return false
 			},
 			startKeepAlive() {
 				// #ifdef APP-PLUS
@@ -277,6 +316,8 @@
 				this.socketReady = false
 				this.emptyMiss = 0
 				this.stopSent = false
+				this.lastInfo = null
+				this.lastInfoAt = 0
 			},
 			onStart() {
 				const ip = (this.ip || '').trim()
@@ -344,39 +385,74 @@
 				this.clearTick()
 				this.timer = setInterval(() => this.pushNow(), 500)
 			},
+			onSocketReady(gen) {
+				if (gen !== this._connectGen) return
+				this.clearOpenWatchdog()
+				this.socketReady = true
+				this.status = '已连接 · ' + this.sourceName
+				this.stopSent = false
+				try {
+					this.sendRaw(JSON.stringify({ type: 'hello', app: 'lyrics-bridge', ver: '1.5.3' }))
+				} catch (e) {}
+				this.pushNow()
+			},
+			onSocketDead(gen, reason) {
+				if (gen !== this._connectGen) return
+				this.socketReady = false
+				this.nativeWs = null
+				this.socketTask = null
+				this.clearOpenWatchdog()
+				if (!this.syncing || this.intentionalStop) return
+				this.status = reason || '连接断开，重连中…'
+				this.scheduleReconnect()
+			},
 			connectSocket() {
 				if (!this.syncing || this.intentionalStop) return
 				this.clearReconnect()
 				this.closeSocketOnly()
-				const host = this.pcHost
+				const host = (this.pcHost || '').trim()
 				const url = 'ws://' + host + ':' + PORT
-				const task = uni.connectSocket({
-					url,
-					complete: () => {}
-				})
-				this.socketTask = task
-				task.onOpen(() => {
-					if (this.socketTask !== task) return
-					this.socketReady = true
-					this.status = '已连接 · ' + this.sourceName
-					this.stopSent = false
-					this.pushNow()
-				})
-				task.onError(() => {
-					if (this.socketTask !== task) return
-					this.socketReady = false
-					if (!this.syncing || this.intentionalStop) return
-					this.status = '连接失败，重试中…'
-					this.scheduleReconnect()
-				})
-				task.onClose(() => {
-					if (this.socketTask !== task) return
-					this.socketReady = false
-					this.socketTask = null
-					if (!this.syncing || this.intentionalStop) return
-					this.status = '连接断开，' + (RECONNECT_MS / 1000) + ' 秒后重连…'
-					this.scheduleReconnect()
-				})
+				const gen = ++this._connectGen
+
+				const armWatchdog = () => {
+					this.clearOpenWatchdog()
+					this.openWatchdog = setTimeout(() => {
+						this.openWatchdog = null
+						if (gen !== this._connectGen || this.socketReady || !this.syncing || this.intentionalStop) return
+						// 壳连上但 onOpen 丢失时，主动拆线重来，避免永久「重连中」却不重连
+						this.status = '连接超时，重试中…'
+						this.closeSocketOnly()
+						this.scheduleReconnect()
+					}, OPEN_WATCHDOG_MS)
+				}
+
+				// App 上优先原生 WebSocket：比 uni.connectSocket 的 onOpen 更可靠
+				let usedNative = false
+				try {
+					if (typeof WebSocket !== 'undefined') {
+						const ws = new WebSocket(url)
+						usedNative = true
+						this.nativeWs = ws
+						ws.onopen = () => this.onSocketReady(gen)
+						ws.onerror = () => this.onSocketDead(gen, '连接失败，重试中…')
+						ws.onclose = () => this.onSocketDead(gen, '连接断开，' + (RECONNECT_MS / 1000) + ' 秒后重连…')
+					}
+				} catch (e) {
+					usedNative = false
+					this.nativeWs = null
+				}
+
+				if (!usedNative) {
+					const task = uni.connectSocket({
+						url,
+						complete: () => {}
+					})
+					this.socketTask = task
+					task.onOpen(() => this.onSocketReady(gen))
+					task.onError(() => this.onSocketDead(gen, '连接失败，重试中…'))
+					task.onClose(() => this.onSocketDead(gen, '连接断开，' + (RECONNECT_MS / 1000) + ' 秒后重连…'))
+				}
+				armWatchdog()
 			},
 			scheduleReconnect() {
 				if (!this.syncing || this.intentionalStop) return
@@ -399,53 +475,69 @@
 				this.artist = ''
 			},
 			sendStop() {
-				if (!this.socketReady || !this.socketTask) return
 				try {
-					this.socketTask.send({
-						data: JSON.stringify({
-							type: 'stop'
-						})
-					})
-					this.stopSent = true
+					if (this.sendRaw(JSON.stringify({ type: 'stop' }))) this.stopSent = true
 				} catch (e) {}
 			},
 			pushNow() {
 				if (!this.syncing) return
-				const info = this.readNowPlaying()
+				// 保活不要每 500ms 重启，否则会抖连接；按间隔轻量续一次
+				const now = Date.now()
+				if (!this._lastKeepAliveAt || now - this._lastKeepAliveAt > KEEPALIVE_REFRESH_MS) {
+					this._lastKeepAliveAt = now
+					this.startKeepAlive()
+					this.setWakelock(true)
+				}
+
+				let info = this.readNowPlaying()
 				if (!info || !info.title) {
 					this.emptyMiss++
-					if (this.emptyMiss >= EMPTY_MISS_LIMIT) {
+					// 短暂读不到会话时，沿用最近一次（息屏常见），避免电脑端立刻清空
+					const holdOk = this.lastInfo && this.lastInfo.title && (Date.now() - this.lastInfoAt) < LAST_HOLD_MS
+					if (holdOk) {
+						info = Object.assign({}, this.lastInfo)
+						if (info.playing) {
+							const elapsed = Date.now() - this.lastInfoAt
+							info.positionMs = (info.positionMs || 0) + elapsed
+						}
+					} else if (this.emptyMiss >= EMPTY_MISS_LIMIT) {
 						this.title = ''
 						this.artist = ''
 						this.status = this.waitText
+						this.lastInfo = null
 						if (!this.stopSent) this.sendStop()
+						return
+					} else {
+						return
 					}
-					return
+				} else {
+					this.emptyMiss = 0
+					this.lastInfo = info
+					this.lastInfoAt = Date.now()
 				}
-				this.emptyMiss = 0
 				this.stopSent = false
 				this.title = info.title
 				this.artist = info.artist || ''
-				const link = this.socketReady ? '' : ' · 重连中'
+				const link = this.socketReady ? '' : ' · 连接中'
 				this.status = (info.playing ? '同步中: ' : '已暂停: ') + info.title + link
-				if (!this.socketReady || !this.socketTask) return
+				if (!this.socketReady) return
 				try {
-					this.socketTask.send({
-						data: JSON.stringify({
-							type: 'state',
-							playing: !!info.playing,
-							title: info.title,
-							artist: info.artist || '',
-							album: info.album || '',
-							position_ms: info.positionMs || 0,
-							duration_ms: info.durationMs || 0,
-							package: info.packageName || '',
-							source: this.source,
-							sent_at: Date.now()
-						})
-					})
+					const ok = this.sendRaw(JSON.stringify({
+						type: 'state',
+						playing: !!info.playing,
+						title: info.title,
+						artist: info.artist || '',
+						album: info.album || '',
+						position_ms: info.positionMs || 0,
+						duration_ms: info.durationMs || 0,
+						package: info.packageName || '',
+						source: this.source,
+						sent_at: Date.now()
+					}))
+					if (!ok) this.scheduleReconnect()
 				} catch (e) {
-					this.socketReady = false
+					// 不把 ready 直接打假死；交给 watchdog / onclose 处理
+					this.scheduleReconnect()
 				}
 			},
 			readNowPlaying() {
@@ -630,6 +722,11 @@
 		margin-top: 18rpx;
 	}
 
+	.seg.wrap {
+		flex-wrap: wrap;
+		margin-right: -12rpx;
+	}
+
 	.seg.compact {
 		margin-top: 48rpx;
 		margin-bottom: 8rpx;
@@ -649,8 +746,17 @@
 		justify-content: center;
 	}
 
+	.seg.wrap .seg-item {
+		flex: 0 0 calc(33.333% - 12rpx);
+		margin-bottom: 12rpx;
+	}
+
 	.seg-item:last-child {
 		margin-right: 0;
+	}
+
+	.seg.wrap .seg-item:last-child {
+		margin-right: 12rpx;
 	}
 
 	.seg-item.on {

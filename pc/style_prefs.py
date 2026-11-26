@@ -12,9 +12,12 @@ import ctypes
 
 @dataclass
 class LyricStyle:
-    alpha: float = 0.92  # 0.3 ~ 1.0
-    font_size: int = 28
-    text_color: str = "#FFFFFF"  # 无底板时默认白字更清晰
+    alpha: float = 0.85  # 整窗透明度（不改字色）；1=不透
+    font_size: int = 12  # 摸鱼默认小字；可调 8~48
+    text_color: str = "#FFFFFF"  # 选什么就画什么，不再被隐蔽度改色
+    outline_color: str = "#000000"  # 描边颜色，可单独选
+    outline_width: int = 0  # 0=无描边；1~3
+    bold: bool = False  # 细体更不显眼
     vertical: bool = False
     # 桌面层只要当前歌词；以下三项永久关闭（兼容旧配置字段）
     show_next: bool = False
@@ -22,10 +25,11 @@ class LyricStyle:
     show_rail: bool = False
     overlay_enabled: bool = True  # 用户可随时关/开桌面歌词
     offset_ms: int = 0  # 歌词进度微调，正数=歌词更早出现
+    show_grip: bool = True  # 小拖动手柄，小字时也好拖
     x: int | None = None
     y: int | None = None
-    width: int = 760
-    height: int = 96
+    width: int = 520
+    height: int = 48
     hotkey: str = "Ctrl+Alt+H"  # 全局：显示/隐藏桌面歌词
 
 

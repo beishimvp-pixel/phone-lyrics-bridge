@@ -36,6 +36,12 @@ def detect_source(package: str) -> str:
     p = (package or "").lower()
     if "qqmusic" in p or "tencent.qqmusic" in p:
         return "qqmusic"
+    if "luna.music" in p or "sodamusic" in p:
+        return "soda"
+    if "netease.cloudmusic" in p or "cloudmusic" in p:
+        return "netease"
+    if "kugou" in p:
+        return "kugou"
     if "bili" in p or "danmaku" in p:
         return "bilibili"
     if "dragon.read" in p or "fanqie" in p or "tomato" in p:
@@ -77,8 +83,8 @@ async def fetch_lyrics(
             pass
         return [LyricLine(0, title.strip())]
 
-    # QQ 音乐 / 其它：QQ 词库 → LRCLIB
-    if source in ("qqmusic", "generic"):
+    # 音乐 App（QQ / 汽水 / 网易云 / 酷狗 / 其它）：QQ 词库 → LRCLIB
+    if source in ("qqmusic", "soda", "netease", "kugou", "generic"):
         try:
             from qq_lyrics import fetch_qq_lyrics
 

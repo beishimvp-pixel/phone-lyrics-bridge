@@ -29,6 +29,9 @@ async def test_qq_match() -> None:
 
 async def test_package_routing() -> None:
     ok("包名识别 QQ", detect_source("com.tencent.qqmusic") == "qqmusic")
+    ok("包名识别汽水", detect_source("com.luna.music") == "soda")
+    ok("包名识别网易云", detect_source("com.netease.cloudmusic") == "netease")
+    ok("包名识别酷狗", detect_source("com.kugou.android") == "kugou")
     ok("包名识别 B站", detect_source("tv.danmaku.bili") == "bilibili")
     ok("包名识别番茄", detect_source("com.dragon.read") == "fanqie")
     lines = await fetch_lyrics(

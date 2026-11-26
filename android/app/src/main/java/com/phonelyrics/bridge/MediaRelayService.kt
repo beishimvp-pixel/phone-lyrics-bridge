@@ -140,10 +140,24 @@ class MediaRelayService : Service() {
 
         if (sessions.isEmpty()) return null
 
-        val qq = sessions.firstOrNull {
-            it.packageName.contains("qqmusic", ignoreCase = true)
+        fun isMusicApp(pkg: String): Boolean {
+            val p = pkg.lowercase()
+            return p.contains("qqmusic") ||
+                p.contains("luna.music") ||
+                p.contains("sodamusic") ||
+                p.contains("cloudmusic") ||
+                p.contains("kugou")
         }
-        if (qq != null) return qq
+
+        val musicPlaying = sessions.firstOrNull { ctrl ->
+            isMusicApp(ctrl.packageName) &&
+                (ctrl.playbackState?.state == PlaybackState.STATE_PLAYING ||
+                    ctrl.playbackState?.state == PlaybackState.STATE_BUFFERING)
+        }
+        if (musicPlaying != null) return musicPlaying
+
+        val musicAny = sessions.firstOrNull { isMusicApp(it.packageName) }
+        if (musicAny != null) return musicAny
 
         return sessions.firstOrNull { ctrl ->
             val st = ctrl.playbackState?.state

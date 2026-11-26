@@ -19,6 +19,7 @@ from typing import Any
 
 import websockets
 from websockets.asyncio.server import ServerConnection
+from PIL import Image, ImageDraw, ImageFont, ImageTk
 
 from lyrics import LyricLine, current_line, fetch_lyrics
 from netutil import all_ipv4, local_ip
@@ -26,8 +27,44 @@ from hotkey import GlobalHotkey, format_hotkey, parse_hotkey
 from style_prefs import LyricStyle, load_style, save_style, screen_pixel_hex, verticalize
 
 PORT = 8765
-STALE_MS = 8000
-HIDE_AFTER_PAUSE_MS = 1200
+# 息屏/切后台时手机 WS 常会断几秒～一两分钟：续显并跟进度，勿立刻藏词
+STALE_MS = 180_000
+HOLD_AFTER_DISCONNECT_MS = 180_000
+# 暂停后仍保留桌面词一段时间（QQ 桌面歌词也不会秒藏）
+HIDE_AFTER_PAUSE_MS = 60_000
+# QQ 式实心底条：整块可点可拖，避免色键点穿/点击后坐标异常导致「点一下就没了」
+PANEL_BG = "#101010"
+HIT_BAR = "#1A1A1A"
+
+
+def virtual_screen() -> tuple[int, int, int, int]:
+    """整块虚拟桌面（含副屏），不要用 winfo_screenwidth 只认主屏。"""
+    user32 = ctypes.windll.user32
+    return (
+        int(user32.GetSystemMetrics(76)),  # SM_XVIRTUALSCREEN
+        int(user32.GetSystemMetrics(77)),  # SM_YVIRTUALSCREEN
+        int(user32.GetSystemMetrics(78)),  # SM_CXVIRTUALSCREEN
+        int(user32.GetSystemMetrics(79)),  # SM_CYVIRTUALSCREEN
+    )
+
+
+def clamp_to_virtual(x: int, y: int, w: int = 80, h: int = 40) -> tuple[int, int]:
+    vx, vy, vw, vh = virtual_screen()
+    if vw <= 0 or vh <= 0:
+        return x, y
+    # 至少留一截在屏内，避免拖没
+    x = min(max(x, vx - w + 40), vx + vw - 40)
+    y = min(max(y, vy - h + 20), vy + vh - 20)
+    return x, y
+
+
+def coords_sane(x: int, y: int) -> bool:
+    """透明/无边框窗在点击时 winfo 有时会给 -32000 等脏值。"""
+    if x <= -30000 or y <= -30000:
+        return False
+    if abs(x) > 50000 or abs(y) > 50000:
+        return False
+    return True
 
 RED = "#E60012"
 BLACK = "#111111"
@@ -35,8 +72,116 @@ WHITE = "#FFFFFF"
 MUTE = "#6B6B6B"
 LINE = "#EEEEEE"
 GRAY_BG = "#F3F3F3"
-# 桌面歌词透明底：该色会被 Windows 抠掉（勿与歌词颜色相同）
-CHROMA = "#FF00FE"
+# 色键：抠透明底。歌词用 Pillow 硬阈值绘制，避免系统抗锯齿把边缘染成「假描边」。
+CHROMA = "#01FE01"
+CHROMA_RGB = (1, 254, 1)
+
+
+def _parse_hex(color: str, fallback: tuple[int, int, int] = (255, 255, 255)) -> tuple[int, int, int]:
+    raw = (color or "").strip().lstrip("#")
+    if len(raw) != 6:
+        return fallback
+    try:
+        return int(raw[0:2], 16), int(raw[2:4], 16), int(raw[4:6], 16)
+    except ValueError:
+        return fallback
+
+
+def _load_ui_font(size: int, bold: bool) -> ImageFont.ImageFont:
+    size = max(8, min(72, int(size)))
+    candidates = [
+        r"C:\Windows\Fonts\msyhbd.ttc" if bold else r"C:\Windows\Fonts\msyh.ttc",
+        r"C:\Windows\Fonts\msyh.ttc",
+        r"C:\Windows\Fonts\simhei.ttf",
+        r"C:\Windows\Fonts\segoeui.ttf",
+    ]
+    for path in candidates:
+        try:
+            return ImageFont.truetype(path, size=size)
+        except Exception:
+            continue
+    return ImageFont.load_default()
+
+
+def render_lyric_image(
+    text: str,
+    *,
+    font_size: int,
+    bold: bool,
+    fill: str,
+    outline: str,
+    outline_width: int,
+    max_width: int,
+    vertical: bool,
+) -> Image.Image:
+    """把歌词画成位图：填充色/描边色可独立设置；透明区填色键。"""
+    content = verticalize(text) if vertical else (text or "")
+    if not content.strip():
+        content = " "
+    font = _load_ui_font(font_size, bold)
+    fill_rgb = _parse_hex(fill, (255, 255, 255))
+    # 禁止与色键撞车
+    if fill_rgb == CHROMA_RGB:
+        fill_rgb = (255, 255, 255)
+    outline_rgb = _parse_hex(outline, (0, 0, 0))
+    if outline_rgb == CHROMA_RGB:
+        outline_rgb = (0, 0, 0)
+    stroke = max(0, min(4, int(outline_width)))
+
+    probe = ImageDraw.Draw(Image.new("RGB", (8, 8)))
+    bbox = probe.multiline_textbbox((0, 0), content, font=font, spacing=4, align="center")
+    tw = max(1, bbox[2] - bbox[0])
+    th = max(1, bbox[3] - bbox[1])
+    pad = 8 + stroke * 2
+    # 横排过长时按字号粗略限制宽度
+    width = min(max(tw + pad * 2, 40), max(120, int(max_width)))
+    height = th + pad * 2
+    if tw + pad * 2 > width and not vertical:
+        # 简单按字符换行
+        chars = list(content.replace("\n", ""))
+        lines: list[str] = []
+        cur = ""
+        for ch in chars:
+            trial = cur + ch
+            tb = probe.textbbox((0, 0), trial, font=font)
+            if (tb[2] - tb[0]) <= width - pad * 2 or not cur:
+                cur = trial
+            else:
+                lines.append(cur)
+                cur = ch
+        if cur:
+            lines.append(cur)
+        content = "\n".join(lines) or " "
+        bbox = probe.multiline_textbbox((0, 0), content, font=font, spacing=4, align="center")
+        tw = max(1, bbox[2] - bbox[0])
+        th = max(1, bbox[3] - bbox[1])
+        width = min(max(tw + pad * 2, 40), max(120, int(max_width)))
+        height = th + pad * 2
+
+    # 先画到 RGBA，再硬阈值落到色键底，消灭半透明粉/黑边
+    rgba = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(rgba)
+    xy = (width // 2, height // 2)
+    if stroke > 0:
+        draw.multiline_text(
+            xy, content, font=font, fill=outline_rgb + (255,),
+            anchor="mm", spacing=4, align="center",
+            stroke_width=stroke, stroke_fill=outline_rgb + (255,),
+        )
+    draw.multiline_text(
+        xy, content, font=font, fill=fill_rgb + (255,),
+        anchor="mm", spacing=4, align="center",
+    )
+
+    out = Image.new("RGB", (width, height), CHROMA_RGB)
+    px_out = out.load()
+    px_in = rgba.load()
+    for y in range(height):
+        for x in range(width):
+            r, g, b, a = px_in[x, y]
+            if a >= 200:
+                px_out[x, y] = (r, g, b)
+    return out
 
 
 @dataclass
@@ -79,13 +224,22 @@ class BridgeServer:
             with self.model.lock:
                 self.model.clients = max(0, self.model.clients - 1)
                 if self.model.clients == 0:
-                    self.model.status = "等待手机连接…"
-                    self.model.state = PlaybackState(received_at=time.time())
+                    # 息屏断线不丢歌：保留上一曲进度，桌面继续跟词
+                    st = self.model.state
+                    if st.title and st.playing:
+                        self.model.status = "手机暂离·歌词续显中"
+                    else:
+                        self.model.status = "等待手机连接…"
 
     async def _on_message(self, raw: str) -> None:
         try:
             data: dict[str, Any] = json.loads(raw)
         except json.JSONDecodeError:
+            return
+
+        if data.get("type") == "hello":
+            with self.model.lock:
+                self.model.status = "手机通道正常，等待播歌…"
             return
 
         if data.get("type") == "stop":
@@ -149,6 +303,9 @@ class BridgeServer:
             "bilibili": "拉取 B 站字幕…",
             "fanqie": "番茄听书标题…",
             "qqmusic": "拉取歌词中…",
+            "soda": "拉取歌词中…",
+            "netease": "拉取歌词中…",
+            "kugou": "拉取歌词中…",
         }.get(source, "匹配文案中…")
         with self.model.lock:
             self.model.status = tip
@@ -174,8 +331,9 @@ async def run_server(model: AppModel) -> None:
         server.handler,
         "0.0.0.0",
         PORT,
-        ping_interval=20,
-        ping_timeout=20,
+        # 息屏时手机端可能短暂无法回 ping；放宽避免误踢
+        ping_interval=45,
+        ping_timeout=120,
     ):
         with model.lock:
             model.server_ok = True
@@ -191,7 +349,7 @@ class LyricsOverlay(tk.Toplevel):
         self.title("桌面歌词")
         self.attributes("-topmost", True)
         self.overrideredirect(True)
-        # 无底板：窗口底色设为色键，交给 Windows 抠透明
+        # 默认色键透明：只露字；鼠标悬停才出拖动条（QQ 桌面歌词同款）
         self.configure(bg=CHROMA)
         try:
             self.attributes("-transparentcolor", CHROMA)
@@ -200,90 +358,198 @@ class LyricsOverlay(tk.Toplevel):
             pass
 
         self.enabled = True
-        self._drag_x = 0
-        self._drag_y = 0
+        self._dragging = False
+        self._chrome_on = False
+        self._chrome_hide_job: str | None = None
+        self._drag_root_x = 0
+        self._drag_root_y = 0
+        self._win_x = 0
+        self._win_y = 0
+        self._live_x: int | None = None
+        self._live_y: int | None = None
         self._visible = False
         self._last_cur = ""
         self._last_nxt = ""
         self._last_meta = ""
-
-        self.bind("<ButtonPress-1>", self._start_drag)
-        self.bind("<B1-Motion>", self._on_drag)
-        self.bind("<ButtonRelease-1>", self._save_pos)
+        self._photo: ImageTk.PhotoImage | None = None
+        self._pause_since: float | None = None
+        self._img_w = 200
+        self._img_h = 40
 
         self.shell = tk.Frame(self, bg=CHROMA)
         self.shell.pack(fill="both", expand=True)
 
-        # 轻阴影（仍是字，不是色块底板）+ 正文
-        self.shadow = tk.Label(
-            self.shell, text="", font=("Microsoft YaHei UI", 28, "bold"),
-            fg="#000000", bg=CHROMA, anchor="center", justify="center",
+        self.current = tk.Label(self.shell, image="", bg=CHROMA, bd=0, highlightthickness=0, cursor="fleur")
+        self.hit_bar = tk.Frame(self.shell, bg=HIT_BAR, height=22, cursor="fleur")
+        self.grip = tk.Label(
+            self.hit_bar, text="按住拖动", font=("Microsoft YaHei UI", 8),
+            fg="#B0B0B0", bg=HIT_BAR, cursor="fleur",
         )
-        self.current = tk.Label(
-            self.shell, text="", font=("Microsoft YaHei UI", 28, "bold"),
-            fg=WHITE, bg=CHROMA, anchor="center", justify="center",
-        )
-        self.shadow.place(relx=0.5, rely=0.5, anchor="center", x=2, y=2)
-        self.current.place(relx=0.5, rely=0.5, anchor="center")
-        for w in (self.shadow, self.current):
-            w.bind("<ButtonPress-1>", self._start_drag)
-            w.bind("<B1-Motion>", self._on_drag)
-            w.bind("<ButtonRelease-1>", self._save_pos)
+        self.current.pack(fill="both", expand=True, padx=6, pady=(4, 0))
+        self.grip.pack(fill="x")
+        # 默认隐藏拖动条；悬停再显示；右键快速隐藏整窗
+        for w in (self, self.shell, self.current, self.hit_bar, self.grip):
+            self._bind_drag(w)
+            w.bind("<Enter>", self._on_chrome_enter, add="+")
+            w.bind("<Leave>", self._on_chrome_leave, add="+")
+            w.bind("<Button-3>", self._on_right_hide, add="+")
 
         self.apply_style(rebuild=True)
         self.withdraw()
         self.after(80, self._tick)
 
+    def _bind_drag(self, w: tk.Misc) -> None:
+        w.bind("<ButtonPress-1>", self._start_drag)
+        w.bind("<B1-Motion>", self._on_drag)
+        w.bind("<ButtonRelease-1>", self._save_pos)
+
+    def _on_right_hide(self, _event: tk.Event | None = None) -> str:
+        """右键：立刻关掉桌面歌词（主窗按钮 / 快捷键可再开）。"""
+        if not self.enabled:
+            return "break"
+        master = self.master
+        if hasattr(master, "toggle_overlay"):
+            master.after(0, master.toggle_overlay)
+        else:
+            self.enabled = False
+            self.withdraw()
+            self._visible = False
+        return "break"
+
+    def _pointer_over_self(self) -> bool:
+        try:
+            x = self.winfo_pointerx()
+            y = self.winfo_pointery()
+            widget = self.winfo_containing(x, y)
+            while widget is not None:
+                if widget == self:
+                    return True
+                widget = widget.master  # type: ignore[assignment]
+        except tk.TclError:
+            pass
+        return False
+
+    def _on_chrome_enter(self, _event: tk.Event | None = None) -> None:
+        if self._chrome_hide_job:
+            try:
+                self.after_cancel(self._chrome_hide_job)
+            except Exception:
+                pass
+            self._chrome_hide_job = None
+        self._set_chrome(True)
+
+    def _on_chrome_leave(self, _event: tk.Event | None = None) -> None:
+        if self._dragging:
+            return
+        if self._chrome_hide_job:
+            try:
+                self.after_cancel(self._chrome_hide_job)
+            except Exception:
+                pass
+        # 子控件之间移动会抖 Leave，稍等再判断指针是否还在窗内
+        self._chrome_hide_job = self.after(280, self._hide_chrome_if_left)
+
+    def _hide_chrome_if_left(self) -> None:
+        self._chrome_hide_job = None
+        if self._dragging:
+            return
+        if self._pointer_over_self():
+            return
+        self._set_chrome(False)
+
+    def _set_chrome(self, on: bool) -> None:
+        """显示/隐藏拖动条：平时透明只留字，悬停才出操作条。"""
+        if on == self._chrome_on and not on:
+            return
+        want = on and bool(getattr(self.style, "show_grip", True))
+        if want:
+            if not self.hit_bar.winfo_ismapped():
+                self.hit_bar.pack(fill="x", side="bottom")
+            self._chrome_on = True
+        else:
+            if self.hit_bar.winfo_ismapped():
+                self.hit_bar.pack_forget()
+            self._chrome_on = False
+        # 高度随条显隐变化，位置保持
+        bar_h = 22 if self._chrome_on else 0
+        self._place(self._img_w + 16, self._img_h + 8 + bar_h)
+
+    def _current_xy(self) -> tuple[int, int]:
+        if self._live_x is not None and self._live_y is not None and coords_sane(self._live_x, self._live_y):
+            return int(self._live_x), int(self._live_y)
+        s = self.style
+        if s.x is not None and s.y is not None and coords_sane(int(s.x), int(s.y)):
+            return int(s.x), int(s.y)
+        vx, vy, vw, _vh = virtual_screen()
+        return int(vx + max(0, (vw - 420) // 2)), int(vy + 72)
+
+    def _place(self, width: int, height: int) -> None:
+        """尺寸+位置一次设上，避免只改尺寸时 Tk 把窗口弹回主屏。"""
+        if self._dragging:
+            return
+        x, y = self._current_xy()
+        x, y = clamp_to_virtual(x, y, width, height)
+        self._live_x, self._live_y = x, y
+        self.geometry(f"{max(80, width)}x{max(36, height)}+{x}+{y}")
+
     def apply_style(self, rebuild: bool = False) -> None:
         s = self.style
+        self.configure(bg=CHROMA)
+        self.shell.configure(bg=CHROMA)
+        self.current.configure(bg=CHROMA)
         try:
             self.attributes("-transparentcolor", CHROMA)
             self.wm_attributes("-transparentcolor", CHROMA)
         except tk.TclError:
             pass
         try:
-            # 透明度只作用在文字观感；底板已被抠掉
-            self.attributes("-alpha", max(0.35, min(1.0, float(s.alpha))))
+            self.attributes("-alpha", max(0.25, min(1.0, float(s.alpha))))
         except tk.TclError:
             pass
 
-        color = (s.text_color or WHITE).upper()
-        if color in (CHROMA.upper(), "#FF00FF", "#FF00FE"):
-            color = WHITE
-        size = max(10, min(72, int(s.font_size)))
-        font = ("Microsoft YaHei UI", size, "bold")
-        wrap = 40 if s.vertical else max(240, s.width - 48)
-        for lab in (self.shadow, self.current):
-            lab.config(
-                font=font,
-                bg=CHROMA,
-                wraplength=wrap,
-                justify="center",
-                anchor="center",
-            )
-        self.current.config(fg=color)
-        self.shadow.config(fg="#000000")
+        self.grip.config(text="按住拖动" if bool(getattr(s, "show_grip", True)) else "")
+        if not bool(getattr(s, "show_grip", True)):
+            self._set_chrome(False)
 
-        if s.vertical:
-            self.geometry(f"{max(90, s.width // 5)}x{max(280, s.height * 3)}")
-        else:
-            self.geometry(f"{max(320, s.width)}x{max(72, s.height)}")
+        if not self._dragging:
+            if s.x is not None and s.y is not None and coords_sane(int(s.x), int(s.y)):
+                self._live_x, self._live_y = int(s.x), int(s.y)
+            elif self._live_x is None or not coords_sane(self._live_x or 0, self._live_y or 0):
+                vx, vy, vw, _vh = virtual_screen()
+                self._live_x = int(vx + max(0, (vw - 420) // 2))
+                self._live_y = int(vy + 72)
 
-        if s.x is not None and s.y is not None:
-            self.geometry(f"+{s.x}+{s.y}")
-        elif self.style.x is None:
-            sw = self.winfo_screenwidth()
-            w = max(90, s.width // 5) if s.vertical else max(320, s.width)
-            self.geometry(f"+{(sw - w) // 2}+64")
+        for w in (self, self.shell, self.current, self.hit_bar, self.grip):
+            self._bind_drag(w)
 
         if self._last_cur:
             self._set_lyric(self._last_cur)
+        elif rebuild:
+            self._set_lyric("歌词预览 Aa")
 
     def _set_lyric(self, cur: str) -> None:
         self._last_cur = cur
-        text = verticalize(cur) if self.style.vertical else cur
-        self.shadow.config(text=text)
-        self.current.config(text=text)
+        s = self.style
+        fill = (s.text_color or WHITE).upper()
+        if fill in (CHROMA.upper(), "#01FE01", "#00FF00", "#FF00FE", "#FF00FF"):
+            fill = WHITE
+        outline = (getattr(s, "outline_color", None) or "#000000").upper()
+        img = render_lyric_image(
+            cur or " ",
+            font_size=int(s.font_size),
+            bold=bool(getattr(s, "bold", False)),
+            fill=fill,
+            outline=outline,
+            outline_width=int(getattr(s, "outline_width", 0) or 0),
+            max_width=max(200, int(s.width) if s.width else 520),
+            vertical=bool(s.vertical),
+        )
+        # 闲置：色键透明只留字；悬停出条时也不改字图
+        self._photo = ImageTk.PhotoImage(img)
+        self.current.config(image=self._photo, bg=CHROMA)
+        self._img_w, self._img_h = img.width, img.height
+        bar_h = 22 if self._chrome_on else 0
+        self._place(self._img_w + 16, self._img_h + 8 + bar_h)
 
     def _set_texts(self, meta: str, cur: str, nxt: str) -> None:
         # 兼容旧调用：忽略 meta / nxt
@@ -291,21 +557,61 @@ class LyricsOverlay(tk.Toplevel):
         self._set_lyric(cur)
 
     def _start_drag(self, event: tk.Event) -> None:
-        self._drag_x = event.x
-        self._drag_y = event.y
+        self._dragging = True
+        self._drag_root_x = int(event.x_root)
+        self._drag_root_y = int(event.y_root)
+        x, y = self._current_xy()
+        try:
+            wx, wy = int(self.winfo_x()), int(self.winfo_y())
+            if coords_sane(wx, wy):
+                x, y = wx, wy
+        except tk.TclError:
+            pass
+        self._win_x, self._win_y = x, y
+        self._live_x, self._live_y = x, y
 
     def _on_drag(self, event: tk.Event) -> None:
-        x = self.winfo_x() + event.x - self._drag_x
-        y = self.winfo_y() + event.y - self._drag_y
+        if not self._dragging:
+            return
+        x = self._win_x + int(event.x_root) - self._drag_root_x
+        y = self._win_y + int(event.y_root) - self._drag_root_y
+        try:
+            ww, hh = max(80, self.winfo_width()), max(36, self.winfo_height())
+        except tk.TclError:
+            ww, hh = 80, 36
+        x, y = clamp_to_virtual(x, y, ww, hh)
+        self._live_x, self._live_y = x, y
         self.geometry(f"+{x}+{y}")
 
-    def _save_pos(self, _event: tk.Event | None = None) -> None:
-        self.style.x = self.winfo_x()
-        self.style.y = self.winfo_y()
+    def _save_pos(self, event: tk.Event | None = None) -> None:
+        moved = True
+        if event is not None:
+            dx = abs(int(event.x_root) - self._drag_root_x)
+            dy = abs(int(event.y_root) - self._drag_root_y)
+            moved = dx >= 4 or dy >= 4
+        self._dragging = False
+        if not moved:
+            # 单击不改位置，避免脏坐标把窗口「点没」
+            return
+        x, y = self._current_xy()
+        if self._live_x is not None and self._live_y is not None and coords_sane(self._live_x, self._live_y):
+            x, y = int(self._live_x), int(self._live_y)
+        if not coords_sane(x, y):
+            return
+        try:
+            ww, hh = max(80, self.winfo_width()), max(36, self.winfo_height())
+        except tk.TclError:
+            ww, hh = 80, 36
+        x, y = clamp_to_virtual(x, y, ww, hh)
+        self._live_x, self._live_y = x, y
+        self.style.x = x
+        self.style.y = y
         save_style(self.style)
+        # 拖完若鼠标已离开，收回拖动条
+        self.after(200, self._hide_chrome_if_left)
 
     def _estimate_position(self, st: PlaybackState) -> int:
-        """按手机进度自动跟词：用 sent_at 补偿网络延迟，并加用户微调。"""
+        """按手机进度自动跟词；断线续显时也用本地时钟往前推。"""
         base = int(st.position_ms)
         offset = int(getattr(self.style, "offset_ms", 0) or 0)
         if not st.playing:
@@ -313,8 +619,8 @@ class LyricsOverlay(tk.Toplevel):
         now_ms = int(time.time() * 1000)
         if st.sent_at > 0:
             lag = now_ms - int(st.sent_at)
-            # 时钟偏差过大时退回本地接收时间
-            if lag < 0 or lag > 15000:
+            # 断线续显允许更大 lag；时钟偏差离谱时退回 received_at
+            if lag < 0 or lag > HOLD_AFTER_DISCONNECT_MS:
                 lag = int(max(0.0, (time.time() - st.received_at) * 1000)) if st.received_at else 0
         elif st.received_at:
             lag = int(max(0.0, (time.time() - st.received_at) * 1000))
@@ -322,38 +628,47 @@ class LyricsOverlay(tk.Toplevel):
             lag = 0
         return max(0, base + lag + offset)
 
-    def _should_show(self, st: PlaybackState, has_lyrics: bool) -> bool:
+    def _should_show(self, st: PlaybackState) -> bool:
         if not self.enabled:
-            return False
-        # 桌面层只展示已匹配到的歌词，不放占位文案
-        if not has_lyrics:
             return False
         if not st.title:
             return False
         age_ms = (time.time() - st.received_at) * 1000 if st.received_at else 99999
         if age_ms > STALE_MS:
             return False
-        if not st.playing and age_ms > HIDE_AFTER_PAUSE_MS:
-            return False
-        return True
+        if st.playing:
+            self._pause_since = None
+            return True
+        # 暂停：不要秒藏（手机 playing 抖动 / 短暂停顿）
+        if self._pause_since is None:
+            self._pause_since = time.time()
+        paused_for = (time.time() - self._pause_since) * 1000
+        return paused_for <= HIDE_AFTER_PAUSE_MS
 
     def _tick(self) -> None:
         with self.model.lock:
             st = PlaybackState(**self.model.state.__dict__)
             lines = list(self.model.lines)
 
-        show = self._should_show(st, bool(lines))
+        show = self._should_show(st)
+        # 拖动中绝不隐藏，避免点按被误判成消失
         if show and not self._visible:
             self.deiconify()
+            self.lift()
             self._visible = True
-        elif not show and self._visible:
+        elif not show and self._visible and not self._dragging:
             self.withdraw()
             self._visible = False
 
         if show:
-            pos = self._estimate_position(st)
-            _, cur, _nxt = current_line(lines, pos)
-            self._set_lyric(cur or "…")
+            if lines:
+                pos = self._estimate_position(st)
+                _, cur, _nxt = current_line(lines, pos)
+                text = cur or st.title or "…"
+            else:
+                text = st.title or "…"
+            if text != self._last_cur:
+                self._set_lyric(text)
 
         self.after(80, self._tick)
 
@@ -365,8 +680,8 @@ class DesktopClient(tk.Tk):
         self.style = load_style()
         self.title("歌词桥")
         self.configure(bg=GRAY_BG)
-        self.geometry("720x640")
-        self.minsize(480, 360)
+        self.geometry("720x760")
+        self.minsize(520, 480)
 
         title_f = tkfont.Font(family="Microsoft YaHei UI", size=28, weight="bold")
         body_f = tkfont.Font(family="Microsoft YaHei UI", size=12)
@@ -396,40 +711,57 @@ class DesktopClient(tk.Tk):
         pad_win = canvas.create_window((0, 0), window=pad, anchor="nw")
 
         def _sync_scroll(_event=None) -> None:
-            canvas.configure(scrollregion=canvas.bbox("all"))
+            canvas.update_idletasks()
+            bbox = canvas.bbox("all")
+            if bbox:
+                canvas.configure(scrollregion=bbox)
 
         def _sync_width(event: tk.Event) -> None:
-            canvas.itemconfigure(pad_win, width=event.width)
+            canvas.itemconfigure(pad_win, width=max(1, int(event.width)))
+            _sync_scroll()
 
         pad.bind("<Configure>", _sync_scroll)
         canvas.bind("<Configure>", _sync_width)
 
-        def _wheel(event: tk.Event) -> None:
+        def _wheel(event: tk.Event) -> str | None:
+            # 只在指针落在本窗口内时滚动，避免抢其它窗口滚轮
+            try:
+                x = self.winfo_pointerx() - self.winfo_rootx()
+                y = self.winfo_pointery() - self.winfo_rooty()
+                if x < 0 or y < 0 or x > self.winfo_width() or y > self.winfo_height():
+                    return None
+            except tk.TclError:
+                return None
             if getattr(event, "delta", 0):
                 canvas.yview_scroll(int(-event.delta / 120), "units")
             elif getattr(event, "num", None) == 4:
                 canvas.yview_scroll(-1, "units")
             elif getattr(event, "num", None) == 5:
                 canvas.yview_scroll(1, "units")
+            return "break"
 
+        # Scale/按钮在 Canvas 内时 Leave 会误触发，改用 bind_all + 窗口焦点判断
         def _bind_wheel(_event=None) -> None:
-            canvas.bind_all("<MouseWheel>", _wheel)
-            canvas.bind_all("<Button-4>", _wheel)
-            canvas.bind_all("<Button-5>", _wheel)
+            self.bind_all("<MouseWheel>", _wheel)
+            self.bind_all("<Button-4>", _wheel)
+            self.bind_all("<Button-5>", _wheel)
 
         def _unbind_wheel(_event=None) -> None:
-            canvas.unbind_all("<MouseWheel>")
-            canvas.unbind_all("<Button-4>")
-            canvas.unbind_all("<Button-5>")
+            self.unbind_all("<MouseWheel>")
+            self.unbind_all("<Button-4>")
+            self.unbind_all("<Button-5>")
 
-        canvas.bind("<Enter>", _bind_wheel)
-        canvas.bind("<Leave>", _unbind_wheel)
+        self.bind("<FocusIn>", _bind_wheel)
+        self.bind("<FocusOut>", _unbind_wheel)
+        self.bind("<Map>", _bind_wheel)
+        self.after(100, _bind_wheel)
+        self.after(300, _sync_scroll)
 
         inner_pad = tk.Frame(pad, bg=WHITE)
         inner_pad.pack(fill="both", expand=True, padx=22, pady=18)
 
         tk.Label(inner_pad, text="歌词桥", font=title_f, fg=BLACK, bg=WHITE).pack(anchor="w")
-        tk.Label(inner_pad, text="桌面端 · 只显示歌词，无底板", font=body_f, fg=MUTE, bg=WHITE).pack(
+        tk.Label(inner_pad, text="桌面端 · 摸鱼小字 / 息屏续显", font=body_f, fg=MUTE, bg=WHITE).pack(
             anchor="w", pady=(2, 12)
         )
 
@@ -481,34 +813,63 @@ class DesktopClient(tk.Tk):
         self.style.show_meta = False
         self.style.show_next = False
         self.style.show_rail = False
-        if (self.style.text_color or "").upper() in ("#111111", "#000000", BLACK.upper()):
-            self.style.text_color = WHITE
+        # 旧配置里的大白粗字 → 迁到摸鱼友好默认（仅当仍是旧默认值时）
+        if int(self.style.font_size) >= 28 and (self.style.text_color or "").upper() in (
+            WHITE.upper(), "#FFFFFF", "#FFF"
+        ):
+            self.style.font_size = 12
+            self.style.text_color = "#B8B8B8"
+            self.style.alpha = min(float(self.style.alpha), 0.55)
+            self.style.bold = False
         self.alpha_var = tk.DoubleVar(value=self.style.alpha)
-        self.size_var = tk.IntVar(value=self.style.font_size)
+        self.size_var = tk.IntVar(value=max(8, min(48, int(self.style.font_size))))
         self.vertical_var = tk.BooleanVar(value=self.style.vertical)
+        self.bold_var = tk.BooleanVar(value=bool(getattr(self.style, "bold", False)))
+        self.grip_var = tk.BooleanVar(value=bool(getattr(self.style, "show_grip", True)))
         self.offset_var = tk.IntVar(value=int(getattr(self.style, "offset_ms", 0) or 0))
         self.color_var = tk.StringVar(value=self.style.text_color)
+        self.outline_color_var = tk.StringVar(
+            value=getattr(self.style, "outline_color", None) or "#000000"
+        )
+        self.outline_width_var = tk.IntVar(
+            value=int(getattr(self.style, "outline_width", 0) or 0)
+        )
         self.pos_var = tk.StringVar(value=self._pos_text())
+
+        r0 = tk.Frame(style_box, bg=WHITE)
+        r0.pack(fill="x", pady=(0, 6))
+        tk.Label(r0, text="预设", font=body_f, bg=WHITE, width=8, anchor="w").pack(side="left")
+        tk.Button(
+            r0, text="摸鱼隐蔽", command=lambda: self.apply_preset("stealth"), font=tiny_f,
+            fg=WHITE, bg=BLACK, relief="flat", bd=0, padx=10, pady=3, cursor="hand2",
+        ).pack(side="left", padx=(0, 6))
+        tk.Button(
+            r0, text="清晰大字", command=lambda: self.apply_preset("clear"), font=tiny_f,
+            fg=BLACK, bg="#F0F0F0", relief="flat", bd=0, padx=10, pady=3, cursor="hand2",
+        ).pack(side="left")
 
         r1 = tk.Frame(style_box, bg=WHITE)
         r1.pack(fill="x", pady=4)
-        tk.Label(r1, text="文字透明度", font=body_f, bg=WHITE, width=8, anchor="w").pack(side="left")
+        tk.Label(r1, text="隐蔽度", font=body_f, bg=WHITE, width=8, anchor="w").pack(side="left")
         tk.Scale(
-            r1, from_=0.35, to=1.0, resolution=0.05, orient="horizontal",
+            r1, from_=0.18, to=1.0, resolution=0.02, orient="horizontal",
             variable=self.alpha_var, bg=WHITE, highlightthickness=0, command=lambda _=None: self._on_style(),
         ).pack(side="left", fill="x", expand=True)
+        tk.Label(r1, text="淡←整体→实（不改字色）", font=tiny_f, bg=WHITE, fg=MUTE).pack(side="left", padx=4)
 
         r2 = tk.Frame(style_box, bg=WHITE)
         r2.pack(fill="x", pady=4)
         tk.Label(r2, text="字号", font=body_f, bg=WHITE, width=8, anchor="w").pack(side="left")
         tk.Scale(
-            r2, from_=12, to=56, resolution=1, orient="horizontal",
+            r2, from_=8, to=48, resolution=1, orient="horizontal",
             variable=self.size_var, bg=WHITE, highlightthickness=0, command=lambda _=None: self._on_style(),
         ).pack(side="left", fill="x", expand=True)
+        self.size_label = tk.Label(r2, text=str(self.size_var.get()), font=tiny_f, bg=WHITE, fg=MUTE, width=3)
+        self.size_label.pack(side="left")
 
         r3 = tk.Frame(style_box, bg=WHITE)
         r3.pack(fill="x", pady=4)
-        tk.Label(r3, text="方向", font=body_f, bg=WHITE, width=8, anchor="w").pack(side="left")
+        tk.Label(r3, text="样式", font=body_f, bg=WHITE, width=8, anchor="w").pack(side="left")
         tk.Radiobutton(
             r3, text="横排", variable=self.vertical_var, value=False, bg=WHITE,
             command=self._on_style_rebuild,
@@ -516,9 +877,14 @@ class DesktopClient(tk.Tk):
         tk.Radiobutton(
             r3, text="竖排", variable=self.vertical_var, value=True, bg=WHITE,
             command=self._on_style_rebuild,
-        ).pack(side="left", padx=(12, 0))
+        ).pack(side="left", padx=(8, 0))
+        tk.Checkbutton(
+            r3, text="加粗", variable=self.bold_var, bg=WHITE, command=self._on_style,
+        ).pack(side="left", padx=(14, 0))
+        tk.Checkbutton(
+            r3, text="拖动手柄", variable=self.grip_var, bg=WHITE, command=self._on_style,
+        ).pack(side="left", padx=(8, 0))
 
-        # 颜色与操作收在同一行，不再单独占一排大红按钮
         r4 = tk.Frame(style_box, bg=WHITE)
         r4.pack(fill="x", pady=4)
         tk.Label(r4, text="文字颜色", font=body_f, bg=WHITE, width=8, anchor="w").pack(side="left")
@@ -534,6 +900,26 @@ class DesktopClient(tk.Tk):
             fg=BLACK, bg="#F0F0F0", relief="flat", bd=0, padx=8, pady=2, cursor="hand2",
         ).pack(side="left")
 
+        r5 = tk.Frame(style_box, bg=WHITE)
+        r5.pack(fill="x", pady=4)
+        tk.Label(r5, text="描边", font=body_f, bg=WHITE, width=8, anchor="w").pack(side="left")
+        self.outline_preview = tk.Label(
+            r5, text="  ", bg=self.outline_color_var.get(), width=3, relief="solid", bd=1
+        )
+        self.outline_preview.pack(side="left", padx=(0, 6))
+        tk.Label(r5, textvariable=self.outline_color_var, font=mono_f, bg=WHITE, fg=MUTE).pack(side="left")
+        tk.Button(
+            r5, text="描边色", command=self.pick_outline_color, font=tiny_f,
+            fg=BLACK, bg="#F0F0F0", relief="flat", bd=0, padx=8, pady=2, cursor="hand2",
+        ).pack(side="left", padx=(10, 4))
+        tk.Label(r5, text="粗细", font=tiny_f, bg=WHITE, fg=MUTE).pack(side="left", padx=(8, 2))
+        tk.Scale(
+            r5, from_=0, to=3, resolution=1, orient="horizontal", length=90,
+            variable=self.outline_width_var, bg=WHITE, highlightthickness=0,
+            command=lambda _=None: self._on_style(),
+        ).pack(side="left")
+        tk.Label(r5, text="0=关", font=tiny_f, bg=WHITE, fg=MUTE).pack(side="left", padx=4)
+
         r6 = tk.Frame(style_box, bg=WHITE)
         r6.pack(fill="x", pady=(4, 0))
         tk.Label(r6, text="位置", font=body_f, bg=WHITE, width=8, anchor="w").pack(side="left")
@@ -542,7 +928,7 @@ class DesktopClient(tk.Tk):
             r6, text="重置", command=self.reset_pos, font=tiny_f,
             fg=BLACK, bg="#F0F0F0", relief="flat", bd=0, padx=8, pady=2, cursor="hand2",
         ).pack(side="left", padx=8)
-        tk.Label(r6, text="可拖动桌面歌词", font=tiny_f, bg=WHITE, fg=MUTE).pack(side="left")
+        tk.Label(r6, text="按住歌词或左侧 ⠿ 拖动", font=tiny_f, bg=WHITE, fg=MUTE).pack(side="left")
 
         r_off = tk.Frame(style_box, bg=WHITE)
         r_off.pack(fill="x", pady=(8, 2))
@@ -573,7 +959,7 @@ class DesktopClient(tk.Tk):
         )
         tk.Label(
             style_box,
-            text="桌面歌词无底板；快捷键显示/隐藏（需含 Ctrl / Alt / Shift）",
+            text="文字颜色=填充；描边可单独改色/关。隐蔽度只调整体透明，不会把白色乘成黑色。",
             font=tiny_f, bg=WHITE, fg=MUTE, anchor="w",
         ).pack(fill="x", pady=(4, 0))
 
@@ -623,16 +1009,26 @@ class DesktopClient(tk.Tk):
         self.style.alpha = float(self.alpha_var.get())
         self.style.font_size = int(self.size_var.get())
         self.style.vertical = bool(self.vertical_var.get())
+        self.style.bold = bool(self.bold_var.get())
+        self.style.show_grip = bool(self.grip_var.get())
         self.style.text_color = self.color_var.get()
+        self.style.outline_color = self.outline_color_var.get()
+        self.style.outline_width = int(self.outline_width_var.get())
         self.style.show_meta = False
         self.style.show_next = False
         self.style.show_rail = False
         self.style.offset_ms = int(self.offset_var.get())
         self.style.overlay_enabled = bool(self.overlay_enabled)
+        self.style.height = max(28, int(self.style.font_size) * 2 + 16)
         save_style(self.style)
         self.overlay.style = self.style
         self.overlay.apply_style(rebuild=rebuild)
         self.color_preview.config(bg=self.style.text_color)
+        if hasattr(self, "outline_preview"):
+            self.outline_preview.config(bg=self.style.outline_color)
+        if hasattr(self, "size_label"):
+            self.size_label.config(text=str(self.style.font_size))
+        self.pos_var.set(self._pos_text())
 
     def _on_style(self) -> None:
         self._commit_style(rebuild=False)
@@ -640,10 +1036,42 @@ class DesktopClient(tk.Tk):
     def _on_style_rebuild(self) -> None:
         self._commit_style(rebuild=True)
 
+    def apply_preset(self, kind: str) -> None:
+        if kind == "stealth":
+            # 摸鱼：略淡，但必须带描边，否则白字在浅色壁纸上等于隐身
+            self.alpha_var.set(0.72)
+            self.size_var.set(14)
+            self.bold_var.set(False)
+            self.grip_var.set(True)
+            self.vertical_var.set(False)
+            self.color_var.set("#F2F2F2")
+            self.outline_width_var.set(1)
+            self.outline_color_var.set("#111111")
+        else:
+            self.alpha_var.set(0.95)
+            self.size_var.set(28)
+            self.bold_var.set(True)
+            self.grip_var.set(True)
+            self.vertical_var.set(False)
+            self.color_var.set(WHITE)
+            self.outline_width_var.set(2)
+            self.outline_color_var.set("#000000")
+        self._commit_style(rebuild=True)
+
     def pick_color(self) -> None:
-        rgb, hx = colorchooser.askcolor(color=self.color_var.get(), title="选择歌词颜色")
+        rgb, hx = colorchooser.askcolor(color=self.color_var.get(), title="选择歌词填充色")
         if hx:
             self.color_var.set(hx.upper())
+            self._commit_style()
+
+    def pick_outline_color(self) -> None:
+        rgb, hx = colorchooser.askcolor(
+            color=self.outline_color_var.get(), title="选择描边颜色"
+        )
+        if hx:
+            self.outline_color_var.set(hx.upper())
+            if int(self.outline_width_var.get()) <= 0:
+                self.outline_width_var.set(1)
             self._commit_style()
 
     def eyedropper(self) -> None:
@@ -835,27 +1263,41 @@ class DesktopClient(tk.Tk):
             clients = self.model.clients
             ok = self.model.server_ok
 
-        show = bool(st.title) and (
-            st.playing or (st.received_at and (time.time() - st.received_at) * 1000 <= HIDE_AFTER_PAUSE_MS)
+        age_ms = (time.time() - st.received_at) * 1000 if st.received_at else 99999
+        show = bool(st.title) and age_ms <= STALE_MS and (
+            st.playing or age_ms <= HIDE_AFTER_PAUSE_MS
         )
-        if st.title and st.received_at and (time.time() - st.received_at) * 1000 > STALE_MS:
-            show = False
         if not self.overlay_enabled:
             show = False
+        holding = (not clients) and bool(st.title) and age_ms <= STALE_MS and st.playing
 
         self.ip_var.set(f"{local_ip()}:{PORT}")
-        self.link_var.set("手机已连接" if clients else "等待手机连接")
-        self.clients_var.set(str(clients) if clients else "0")
-        self.status_var.set(status if ok else f"服务异常 · {status}")
+        if clients:
+            self.link_var.set("手机已连接")
+        elif holding:
+            self.link_var.set("手机暂离·续显")
+        else:
+            self.link_var.set("等待手机连接")
+        self.clients_var.set(str(clients) if clients else ("…" if holding else "0"))
+        if clients and not st.title:
+            tip = "已连接但未收到歌曲（手机若显示重连中：停同步再开，或装 1.5.2）"
+            self.status_var.set(tip if ok else f"服务异常 · {status}")
+        else:
+            self.status_var.set(status if ok else f"服务异常 · {status}")
         self.lyric_on_var.set("ON" if show else "OFF")
-        self._link_badge.config(bg=BLACK if clients else "#DDDDDD", fg=WHITE if clients else MUTE)
+        self._link_badge.config(
+            bg=BLACK if clients else ("#666666" if holding else "#DDDDDD"),
+            fg=WHITE if (clients or holding) else MUTE,
+        )
         self._lyric_badge.config(bg=BLACK if show else "#DDDDDD", fg=WHITE if show else MUTE)
 
         if st.title:
             self.track_var.set(st.title)
             if lines:
                 pos = st.position_ms
-                if st.playing and st.received_at:
+                if st.playing and st.sent_at:
+                    pos += max(0, int(time.time() * 1000) - int(st.sent_at))
+                elif st.playing and st.received_at:
                     pos += int(max(0.0, (time.time() - st.received_at) * 1000))
                 _, cur, nxt = current_line(lines, pos)
                 self.line_var.set(cur or nxt or "…")
@@ -863,7 +1305,10 @@ class DesktopClient(tk.Tk):
                 self.line_var.set(f"{st.artist} · 未匹配到歌词" if st.artist else "未匹配到歌词")
         else:
             self.track_var.set("—")
-            self.line_var.set("停播即隐藏" if clients else "等待手机播放")
+            if clients:
+                self.line_var.set("等手机推送曲目（重连中时不会推）")
+            else:
+                self.line_var.set("等待手机播放")
 
         self.after(200, self.refresh_ui)
 

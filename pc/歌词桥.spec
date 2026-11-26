@@ -3,7 +3,7 @@ from PyInstaller.utils.hooks import collect_all
 
 datas = []
 binaries = []
-hiddenimports = ['websockets', 'httpx', 'style_prefs', 'hotkey', 'lyrics', 'qq_lyrics', 'bili_subs']
+hiddenimports = ['websockets', 'httpx', 'style_prefs', 'hotkey', 'lyrics', 'qq_lyrics', 'bili_subs', 'netutil']
 tmp_ret = collect_all('websockets')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 

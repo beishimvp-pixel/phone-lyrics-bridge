@@ -15,10 +15,29 @@ import PowerManager from 'android.os.PowerManager'
 import Uri from 'android.net.Uri'
 import Build from 'android.os.Build'
 import SystemClock from 'android.os.SystemClock'
+import { SyncKeepAliveService } from './SyncKeepAliveService.uts'
 
-export { startKeepAlive, stopKeepAlive } from './SyncKeepAliveService.uts'
+const SDK_M : Int = 23
+const SDK_O : Int = 26
 
 const LISTENER_CLASS = 'uts.sdk.modules.lyricsNotifyListener.SessionNotificationListener'
+
+/** Vue3 UTS proxy 不识别 re-export，须在 index.uts 直接 export */
+export function startKeepAlive() : void {
+	const ctx = UTSAndroid.getAppContext()!
+	const intent = new Intent(ctx, (new SyncKeepAliveService()).javaClass)
+	if (Build.VERSION.SDK_INT >= SDK_O) {
+		ctx.startForegroundService(intent)
+	} else {
+		ctx.startService(intent)
+	}
+}
+
+export function stopKeepAlive() : void {
+	const ctx = UTSAndroid.getAppContext()!
+	const intent = new Intent(ctx, (new SyncKeepAliveService()).javaClass)
+	ctx.stopService(intent)
+}
 
 export type NowPlayingInfo = {
 	title : string
@@ -43,7 +62,7 @@ export function requestIgnoreBatteryOptimizations() : void {
 	try {
 		const pm = ctx.getSystemService(Context.POWER_SERVICE) as PowerManager
 		const pkg = ctx.getPackageName()
-		if (Build.VERSION.SDK_INT >= 23) {
+		if (Build.VERSION.SDK_INT >= SDK_M) {
 			if (!pm.isIgnoringBatteryOptimizations(pkg)) {
 				const intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
 				intent.setData(Uri.parse('package:' + pkg))
@@ -76,9 +95,28 @@ function matchMode(pkg : string, mode : string) : boolean {
 		return p.indexOf('bili') >= 0 || p.indexOf('danmaku') >= 0
 	}
 	if (mode == 'fanqie') {
-		return p.indexOf('dragon.read') >= 0 || p.indexOf('fanqie') >= 0
+		return p.indexOf('dragon.read') >= 0 || p.indexOf('fanqie') >= 0 || p.indexOf('tomato') >= 0
+	}
+	if (mode == 'soda') {
+		// 汽水音乐 com.luna.music
+		return p.indexOf('luna.music') >= 0 || p.indexOf('sodamusic') >= 0
+	}
+	if (mode == 'netease') {
+		// 网易云音乐 com.netease.cloudmusic
+		return p.indexOf('netease.cloudmusic') >= 0 || p.indexOf('cloudmusic') >= 0
+	}
+	if (mode == 'kugou') {
+		// 酷狗音乐 com.kugou.android 等
+		return p.indexOf('kugou') >= 0
 	}
 	return p.indexOf('qqmusic') >= 0
+}
+
+function normalizeMode(mode : string) : string {
+	if (mode == 'bilibili' || mode == 'fanqie' || mode == 'soda' || mode == 'netease' || mode == 'kugou' || mode == 'qqmusic') {
+		return mode
+	}
+	return 'qqmusic'
 }
 
 export function readNowPlaying(mode : string) : NowPlayingInfo | null {
@@ -90,10 +128,7 @@ export function readNowPlaying(mode : string) : NowPlayingInfo | null {
 		return null
 	}
 
-	let prefer = mode
-	if (prefer != 'bilibili' && prefer != 'fanqie') {
-		prefer = 'qqmusic'
-	}
+	let prefer = normalizeMode(mode)
 
 	let chosenIndex : Int = -1
 	let bestScore : Int = -1

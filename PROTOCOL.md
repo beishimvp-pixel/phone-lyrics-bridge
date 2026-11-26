@@ -22,6 +22,7 @@ ws://<电脑局域网IP>:8765
   "position_ms": 12500,
   "duration_ms": 240000,
   "package": "com.tencent.qqmusic",
+  "source": "qqmusic",
   "sent_at": 1730000000123
 }
 ```
@@ -31,7 +32,8 @@ ws://<电脑局域网IP>:8765
 | `playing` | 是否正在播放 |
 | `position_ms` | 当前进度（毫秒） |
 | `sent_at` | 手机发出时的 epoch 毫秒，用于电脑补偿网络延迟 |
-| `package` | 可选，播放器包名 |
+| `package` | 可选，播放器包名。常见：`com.tencent.qqmusic`、`com.luna.music`（汽水）、`com.netease.cloudmusic`、`com.kugou.android`、`tv.danmaku.bili`、`com.dragon.read` |
+| `source` | 可选，手机所选来源：`qqmusic` / `soda` / `netease` / `kugou` / `bilibili` / `fanqie`（电脑端以 `package` 识别为准） |
 
 ## 停止 / 清空
 
