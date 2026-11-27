@@ -33,11 +33,19 @@ class LyricStyle:
     hotkey: str = "Ctrl+Alt+H"  # 全局：显示/隐藏桌面歌词
 
 
-def prefs_path() -> Path:
+def prefs_dir() -> Path:
     base = os.environ.get("APPDATA") or str(Path.home())
     folder = Path(base) / "LyricsBridge"
     folder.mkdir(parents=True, exist_ok=True)
-    return folder / "lyric_style.json"
+    return folder
+
+
+def prefs_path() -> Path:
+    return prefs_dir() / "lyric_style.json"
+
+
+def log_path() -> Path:
+    return prefs_dir() / "client.log"
 
 
 def load_style() -> LyricStyle:

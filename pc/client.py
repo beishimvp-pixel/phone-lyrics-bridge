@@ -9,12 +9,15 @@ from __future__ import annotations
 import asyncio
 import ctypes
 import json
+import os
 import socket
+import sys
 import threading
 import time
+import traceback
 import tkinter as tk
 from dataclasses import dataclass, field
-from tkinter import colorchooser, font as tkfont
+from tkinter import colorchooser, font as tkfont, messagebox
 from typing import Any
 
 import websockets
@@ -24,7 +27,10 @@ from PIL import Image, ImageDraw, ImageFont, ImageTk
 from lyrics import LyricLine, current_line, fetch_lyrics
 from netutil import all_ipv4, local_ip
 from hotkey import GlobalHotkey, format_hotkey, parse_hotkey
-from style_prefs import LyricStyle, load_style, save_style, screen_pixel_hex, verticalize
+from style_prefs import LyricStyle, load_style, log_path, save_style, screen_pixel_hex, verticalize
+
+# CreateMutex 句柄需在进程存活期持有，否则单实例失效
+_INSTANCE_MUTEX = None
 
 PORT = 8765
 # 息屏/切后台时手机 WS 常会断几秒～一两分钟：续显并跟进度，勿立刻藏词
@@ -35,6 +41,51 @@ HIDE_AFTER_PAUSE_MS = 60_000
 # QQ 式实心底条：整块可点可拖，避免色键点穿/点击后坐标异常导致「点一下就没了」
 PANEL_BG = "#101010"
 HIT_BAR = "#1A1A1A"
+_LOG_LOCK = threading.Lock()
+_LOG_MAX_BYTES = 1_500_000
+
+
+def app_log(msg: str) -> None:
+    """写入 %APPDATA%\\LyricsBridge\\client.log，方便排查卡住/打不开。"""
+    line = f"{time.strftime('%Y-%m-%d %H:%M:%S')} {msg}"
+    try:
+        print(line, flush=True)
+    except Exception:
+        pass
+    try:
+        path = log_path()
+        with _LOG_LOCK:
+            if path.exists() and path.stat().st_size > _LOG_MAX_BYTES:
+                bak = path.with_suffix(".log.bak")
+                try:
+                    if bak.exists():
+                        bak.unlink()
+                    path.replace(bak)
+                except OSError:
+                    pass
+            with path.open("a", encoding="utf-8") as f:
+                f.write(line + "\n")
+    except Exception:
+        pass
+
+
+def ensure_single_instance() -> bool:
+    """已有实例则提示并前置旧窗口，避免二次启动占不到 8765、看起来像打不开。"""
+    global _INSTANCE_MUTEX
+    kernel32 = ctypes.windll.kernel32
+    kernel32.SetLastError(0)
+    _INSTANCE_MUTEX = kernel32.CreateMutexW(None, False, "Local\\PhoneLyricsBridge_SingleInstance")
+    if kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
+        return False
+    return True
+
+
+def focus_existing_instance() -> None:
+    user32 = ctypes.windll.user32
+    hwnd = user32.FindWindowW(None, "歌词桥")
+    if hwnd:
+        user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+        user32.SetForegroundWindow(hwnd)
 
 
 def virtual_screen() -> tuple[int, int, int, int]:
@@ -214,12 +265,20 @@ class BridgeServer:
         self._fetch_token = 0
 
     async def handler(self, ws: ServerConnection) -> None:
+        peer = ""
+        try:
+            peer = str(getattr(ws, "remote_address", "") or "")
+        except Exception:
+            peer = ""
         with self.model.lock:
             self.model.clients += 1
             self.model.status = "手机已连接"
+        app_log(f"phone connected {peer} clients={self.model.clients}")
         try:
             async for raw in ws:
                 await self._on_message(str(raw))
+        except Exception as e:
+            app_log(f"phone ws error {peer}: {e}")
         finally:
             with self.model.lock:
                 self.model.clients = max(0, self.model.clients - 1)
@@ -230,6 +289,7 @@ class BridgeServer:
                         self.model.status = "手机暂离·歌词续显中"
                     else:
                         self.model.status = "等待手机连接…"
+            app_log(f"phone disconnected {peer} clients={self.model.clients}")
 
     async def _on_message(self, raw: str) -> None:
         try:
@@ -281,6 +341,7 @@ class BridgeServer:
             return
 
         if track_key != old_key:
+            app_log(f"track change playing={playing} {artist} - {title}")
             self._fetch_token += 1
             token = self._fetch_token
             asyncio.create_task(
@@ -310,7 +371,11 @@ class BridgeServer:
         with self.model.lock:
             self.model.status = tip
             self.model.lines = []
-        lines = await fetch_lyrics(artist, title, album, duration_ms, package)
+        try:
+            lines = await fetch_lyrics(artist, title, album, duration_ms, package)
+        except Exception as e:
+            app_log(f"fetch_lyrics failed: {e}")
+            lines = []
         if token != self._fetch_token:
             return
         with self.model.lock:
@@ -323,10 +388,12 @@ class BridgeServer:
                 self.model.status = "番茄·章节标题"
             else:
                 self.model.status = f"歌词 {len(lines)} 行" if lines else "无歌词"
+        app_log(f"lyrics ready source={source} lines={len(lines)} {artist} - {title}")
 
 
 async def run_server(model: AppModel) -> None:
     server = BridgeServer(model)
+    app_log(f"starting ws server 0.0.0.0:{PORT}")
     async with websockets.serve(
         server.handler,
         "0.0.0.0",
@@ -338,6 +405,7 @@ async def run_server(model: AppModel) -> None:
         with model.lock:
             model.server_ok = True
             model.status = "服务已启动，等待手机连接…"
+        app_log("ws server listening")
         await asyncio.Future()
 
 
@@ -646,30 +714,34 @@ class LyricsOverlay(tk.Toplevel):
         return paused_for <= HIDE_AFTER_PAUSE_MS
 
     def _tick(self) -> None:
-        with self.model.lock:
-            st = PlaybackState(**self.model.state.__dict__)
-            lines = list(self.model.lines)
+        try:
+            with self.model.lock:
+                st = PlaybackState(**self.model.state.__dict__)
+                lines = list(self.model.lines)
 
-        show = self._should_show(st)
-        # 拖动中绝不隐藏，避免点按被误判成消失
-        if show and not self._visible:
-            self.deiconify()
-            self.lift()
-            self._visible = True
-        elif not show and self._visible and not self._dragging:
-            self.withdraw()
-            self._visible = False
+            show = self._should_show(st)
+            # 拖动中绝不隐藏，避免点按被误判成消失
+            if show and not self._visible:
+                self.deiconify()
+                self.lift()
+                self._visible = True
+                app_log(f"overlay show: {st.artist} - {st.title}")
+            elif not show and self._visible and not self._dragging:
+                self.withdraw()
+                self._visible = False
+                app_log("overlay hide")
 
-        if show:
-            if lines:
-                pos = self._estimate_position(st)
-                _, cur, _nxt = current_line(lines, pos)
-                text = cur or st.title or "…"
-            else:
-                text = st.title or "…"
-            if text != self._last_cur:
-                self._set_lyric(text)
-
+            if show:
+                if lines:
+                    pos = self._estimate_position(st)
+                    _, cur, _nxt = current_line(lines, pos)
+                    text = cur or st.title or "…"
+                else:
+                    text = st.title or "…"
+                if text != self._last_cur:
+                    self._set_lyric(text)
+        except Exception:
+            app_log("overlay tick error:\n" + traceback.format_exc())
         self.after(80, self._tick)
 
 
@@ -1321,22 +1393,49 @@ class DesktopClient(tk.Tk):
 
 
 def main() -> None:
+    if not ensure_single_instance():
+        app_log("second launch blocked: already running")
+        try:
+            focus_existing_instance()
+            root = tk.Tk()
+            root.withdraw()
+            messagebox.showinfo(
+                "歌词桥",
+                "歌词桥已经在运行。\n\n已尝试把旧窗口置前。\n若桌面上看不到，到任务栏点「歌词桥」，或结束旧进程后再开。",
+            )
+            root.destroy()
+        except Exception:
+            pass
+        sys.exit(0)
+
     socket.setdefaulttimeout(5)
     model = AppModel()
-    print("歌词桥桌面客户端 · dir-2 + 样式调节")
-    print("本机 IP:", ", ".join(all_ipv4()))
-    print("端口:", PORT)
+    app_log("==== client start pid=%s ====" % os.getpid())
+    app_log("ip=" + ", ".join(all_ipv4()) + f" port={PORT}")
+    app_log(f"log file: {log_path()}")
 
     def _thread() -> None:
         try:
             asyncio.run(run_server(model))
+        except OSError as e:
+            app_log(f"server bind failed: {e}")
+            with model.lock:
+                model.server_ok = False
+                model.status = f"端口 {PORT} 被占用：{e}"
         except Exception as e:
+            app_log(f"server crashed: {e}\n{traceback.format_exc()}")
             with model.lock:
                 model.server_ok = False
                 model.status = f"服务失败：{e}"
 
     threading.Thread(target=_thread, daemon=True).start()
-    DesktopClient(model).mainloop()
+    try:
+        DesktopClient(model).mainloop()
+    except Exception:
+        app_log("ui crashed:\n" + traceback.format_exc())
+        raise
+    finally:
+        app_log("==== client exit ====")
 
 
 if __name__ == "__main__":
